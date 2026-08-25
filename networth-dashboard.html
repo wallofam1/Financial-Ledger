@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ledger — Net Worth</title>
+<title>Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
@@ -21,6 +21,7 @@
     --liability-dim:#7A576F;
     --gold:#8FA3C7;
     --radius:10px;
+    --nav-h:52px;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -28,48 +29,68 @@
     background:var(--bg);
     color:var(--ink);
     font-family:'Public Sans', -apple-system, sans-serif;
-    padding:28px 20px 60px;
     min-height:100vh;
+    padding-bottom:40px;
   }
-  .wrap{max-width:920px;margin:0 auto;}
 
-  /* Masthead */
-  .masthead{
-    display:flex;justify-content:space-between;align-items:flex-end;
+  /* ========== Persistent Top Nav ========== */
+  .topnav{
+    position:sticky;top:0;z-index:100;
+    background:rgba(18,21,26,0.92);
+    backdrop-filter:blur(12px);
     border-bottom:1px solid var(--hairline);
-    padding-bottom:18px;margin-bottom:26px;
-    flex-wrap:wrap;gap:12px;
+    padding:0 20px;
   }
-  .masthead h1{
-    font-family:'Fraunces', serif;
-    font-weight:600;
-    font-size:28px;
-    letter-spacing:0.01em;
-    margin:0;
+  .topnav-inner{
+    max-width:920px;margin:0 auto;
+    display:flex;align-items:center;justify-content:space-between;
+    height:var(--nav-h);gap:16px;
   }
-  .masthead .eyebrow{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:11px;
-    letter-spacing:0.14em;
-    text-transform:uppercase;
-    color:var(--ink-muted);
-    display:block;margin-bottom:4px;
+  .brand{
+    display:flex;align-items:baseline;gap:10px;flex-shrink:0;
+  }
+  .brand .logo{
+    font-family:'Fraunces', serif;font-weight:600;font-size:20px;
+    letter-spacing:0.01em;color:var(--ink);
+  }
+  .brand .tag{
+    font-family:'IBM Plex Mono', monospace;font-size:10px;
+    letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-muted);
+  }
+  .tabs{
+    display:flex;gap:2px;background:var(--surface);
+    border:1px solid var(--hairline);border-radius:8px;padding:3px;
+  }
+  .tab-btn{
+    font-family:'IBM Plex Mono', monospace;font-size:12px;font-weight:500;
+    letter-spacing:0.04em;text-transform:uppercase;
+    background:transparent;border:none;color:var(--ink-muted);
+    padding:7px 14px;border-radius:6px;cursor:pointer;
+    transition:color .15s, background .15s;
+  }
+  .tab-btn:hover{color:var(--ink);}
+  .tab-btn.active{
+    background:var(--surface-2);color:var(--ink);
+    box-shadow:0 1px 0 rgba(0,0,0,0.2);
   }
   .as-of{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:12px;
-    color:var(--ink-muted);
-    text-align:right;
+    font-family:'IBM Plex Mono', monospace;font-size:11px;
+    color:var(--ink-muted);white-space:nowrap;
+  }
+  @media (max-width:640px){
+    .topnav-inner{flex-wrap:wrap;height:auto;padding:10px 0;gap:10px;}
+    .brand{width:100%;justify-content:space-between;}
+    .tabs{width:100%;}
+    .tab-btn{flex:1;text-align:center;padding:8px 6px;font-size:11px;}
+    .as-of{display:none;}
   }
 
-  /* Summary row */
-  .summary{
-    display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px;
-    margin-bottom:28px;
-  }
-  @media (max-width:640px){.summary{grid-template-columns:1fr;}}
-  .summary-4{grid-template-columns:1fr 1fr 1fr 1fr;}
-  @media (max-width:640px){.summary-4{grid-template-columns:1fr 1fr;}}
+  /* ========== Layout ========== */
+  .wrap{max-width:920px;margin:0 auto;padding:24px 20px 0;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  /* Cards & shared */
   .card{
     background:var(--surface);
     border:1px solid var(--hairline);
@@ -83,27 +104,36 @@
   }
   .card .figure{
     font-family:'IBM Plex Mono', monospace;
-    font-size:30px;font-weight:600;
-    line-height:1.1;
+    font-size:28px;font-weight:600;line-height:1.1;
   }
-  .card.net .figure{color:var(--gold);font-size:34px;}
+  .card.net .figure{color:var(--gold);font-size:32px;}
   .card .delta{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:12px;margin-top:8px;
+    font-family:'IBM Plex Mono', monospace;font-size:12px;margin-top:8px;
   }
   .delta.up{color:var(--asset);}
   .delta.down{color:var(--liability);}
   .card.assets .figure{color:var(--asset);}
   .card.liabilities .figure{color:var(--liability);}
 
-  /* Chart */
-  .chart-card{
+  .summary{
+    display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px;
+    margin-bottom:22px;
+  }
+  @media (max-width:640px){.summary{grid-template-columns:1fr;}}
+  .summary-4{grid-template-columns:1fr 1fr 1fr 1fr;}
+  @media (max-width:640px){.summary-4{grid-template-columns:1fr 1fr;}}
+
+  .chart-card, .section{
     background:var(--surface);border:1px solid var(--hairline);
-    border-radius:var(--radius);padding:20px;margin-bottom:28px;
+    border-radius:var(--radius);padding:18px 20px;margin-bottom:18px;
   }
   .chart-card h2, .section h2{
     font-family:'Fraunces', serif;font-weight:500;font-size:16px;
     margin:0 0 14px;color:var(--ink);
+  }
+  .section h2 .tally{
+    font-family:'IBM Plex Mono', monospace;font-weight:400;
+    font-size:12px;color:var(--ink-muted);margin-left:8px;
   }
   .chart-wrap{height:220px;}
   .empty-note{
@@ -111,17 +141,9 @@
     font-size:12px;text-align:center;padding:40px 0;
   }
 
-  /* Ledger sections */
-  .ledger-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px;}
+  .ledger-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
   @media (max-width:640px){.ledger-cols{grid-template-columns:1fr;}}
-  .section{
-    background:var(--surface);border:1px solid var(--hairline);
-    border-radius:var(--radius);padding:18px 20px;
-  }
-  .section h2 .tally{
-    font-family:'IBM Plex Mono', monospace;font-weight:400;
-    font-size:12px;color:var(--ink-muted);margin-left:8px;
-  }
+
   .row{
     display:flex;align-items:center;gap:8px;
     padding:9px 0;border-bottom:1px dashed var(--hairline);
@@ -143,11 +165,11 @@
     color:var(--ink);font-family:'IBM Plex Mono';font-size:14px;
     text-align:right;padding:6px 8px;border-radius:6px;
   }
-  .row .del{
+  .row .del, .expense-row .del{
     background:none;border:none;color:var(--ink-muted);
     cursor:pointer;font-size:15px;padding:2px 6px;line-height:1;
   }
-  .row .del:hover{color:var(--liability);}
+  .row .del:hover, .expense-row .del:hover{color:var(--liability);}
   .add-row{
     margin-top:10px;background:none;border:1px dashed var(--hairline);
     color:var(--ink-muted);font-family:'IBM Plex Mono';font-size:12px;
@@ -157,10 +179,9 @@
   .section.assets h2{color:var(--asset);}
   .section.liabilities h2{color:var(--liability);}
 
-  /* Actions */
   .actions{
     display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;
-    align-items:center;margin-top:8px;
+    align-items:center;margin-top:4px;margin-bottom:8px;
   }
   .actions .left{display:flex;gap:10px;flex-wrap:wrap;}
   button.primary{
@@ -183,19 +204,7 @@
   .save-msg.show{opacity:1;}
   #importFile{display:none;}
 
-  /* Expense section */
-  .section-header{
-    display:flex;justify-content:space-between;align-items:flex-end;
-    margin:44px 0 22px;padding-bottom:16px;border-bottom:1px solid var(--hairline);
-    flex-wrap:wrap;gap:10px;
-  }
-  .section-header h1{
-    font-family:'Fraunces', serif;font-weight:600;font-size:24px;margin:0;
-  }
-  .section-header .eyebrow{
-    font-family:'IBM Plex Mono', monospace;font-size:11px;letter-spacing:0.14em;
-    text-transform:uppercase;color:var(--ink-muted);display:block;margin-bottom:4px;
-  }
+  /* Expenses */
   .expense-row{
     display:flex;align-items:center;gap:8px;flex-wrap:wrap;
     padding:10px 0;border-bottom:1px dashed var(--hairline);
@@ -238,121 +247,236 @@
   .bar-track{height:6px;background:var(--surface-2);border-radius:4px;overflow:hidden;}
   .bar-fill{height:100%;background:var(--liability);border-radius:4px;}
 
+  /* Dashboard helpers */
+  .dash-grid{
+    display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-bottom:18px;
+  }
+  @media (max-width:720px){.dash-grid{grid-template-columns:1fr;}}
+  .mini-list .row{padding:8px 0;}
+  .mini-list .row span.val{font-family:'IBM Plex Mono';font-size:13px;}
+  .section-link{
+    font-family:'IBM Plex Mono';font-size:11px;color:var(--gold);
+    background:none;border:none;cursor:pointer;padding:0;margin-left:auto;
+  }
+  .section-link:hover{text-decoration:underline;}
+  .panel-header{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    margin-bottom:20px;flex-wrap:wrap;gap:8px;
+  }
+  .panel-header h1{
+    font-family:'Fraunces', serif;font-weight:600;font-size:24px;margin:0;
+  }
+  .panel-header .eyebrow{
+    font-family:'IBM Plex Mono', monospace;font-size:11px;letter-spacing:0.14em;
+    text-transform:uppercase;color:var(--ink-muted);display:block;margin-bottom:4px;
+  }
+
   footer{
     text-align:center;color:var(--ink-muted);font-family:'IBM Plex Mono';
-    font-size:11px;margin-top:30px;
+    font-size:11px;margin-top:28px;padding:0 20px;
   }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <div class="masthead">
-    <div>
-      <span class="eyebrow">Personal Ledger</span>
-      <h1>Net Worth</h1>
+<!-- Persistent Top Navigation -->
+<nav class="topnav">
+  <div class="topnav-inner">
+    <div class="brand">
+      <span class="logo">Ledger</span>
+      <span class="tag">Personal</span>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="dashboard" role="tab" aria-selected="true">Dashboard</button>
+      <button class="tab-btn" data-tab="accounts" role="tab" aria-selected="false">Accounts</button>
+      <button class="tab-btn" data-tab="expenses" role="tab" aria-selected="false">Expenses</button>
     </div>
     <div class="as-of" id="asOf">—</div>
   </div>
+</nav>
 
-  <div class="summary">
-    <div class="card net">
-      <div class="label">Net Worth</div>
-      <div class="figure" id="netWorthFig">$0</div>
-      <div class="delta" id="netDelta"></div>
+<div class="wrap">
+
+  <!-- ========== DASHBOARD ========== -->
+  <div class="panel active" id="panel-dashboard" role="tabpanel">
+    <div class="panel-header">
+      <div>
+        <span class="eyebrow">At a glance</span>
+        <h1>Dashboard</h1>
+      </div>
     </div>
-    <div class="card assets">
-      <div class="label">Total Assets</div>
-      <div class="figure" id="assetsFig">$0</div>
+
+    <div class="summary">
+      <div class="card net">
+        <div class="label">Net Worth</div>
+        <div class="figure" id="netWorthFig">$0</div>
+        <div class="delta" id="netDelta"></div>
+      </div>
+      <div class="card assets">
+        <div class="label">Total Assets</div>
+        <div class="figure" id="assetsFig">$0</div>
+      </div>
+      <div class="card liabilities">
+        <div class="label">Total Liabilities</div>
+        <div class="figure" id="liabFig">$0</div>
+      </div>
     </div>
-    <div class="card liabilities">
-      <div class="label">Total Liabilities</div>
-      <div class="figure" id="liabFig">$0</div>
+
+    <div class="chart-card">
+      <h2>Net Worth History</h2>
+      <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
+      <div class="empty-note" id="chartEmpty" style="display:none;">No snapshots yet — switch to Accounts and click “Save Snapshot” to start tracking.</div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="section">
+        <div style="display:flex;align-items:center;margin-bottom:12px;">
+          <h2 style="margin:0;">This Month’s Spending</h2>
+          <button class="section-link" data-goto="expenses">View all →</button>
+        </div>
+        <div class="summary summary-4" style="margin-bottom:0;">
+          <div class="card liabilities" style="padding:14px 16px;">
+            <div class="label">Spent</div>
+            <div class="figure" id="dashExpMonth" style="font-size:22px;">$0</div>
+          </div>
+          <div class="card liabilities" style="padding:14px 16px;">
+            <div class="label">Recurring</div>
+            <div class="figure" id="dashExpRecurring" style="font-size:22px;">$0</div>
+          </div>
+          <div class="card" style="padding:14px 16px;">
+            <div class="label">Top Cat</div>
+            <div class="figure" id="dashExpTop" style="font-size:16px;">—</div>
+          </div>
+          <div class="card" style="padding:14px 16px;">
+            <div class="label">Txns</div>
+            <div class="figure" id="dashExpCount" style="font-size:22px;">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div style="display:flex;align-items:center;margin-bottom:12px;">
+          <h2 style="margin:0;">Recurring</h2>
+          <button class="section-link" data-goto="expenses">Manage →</button>
+        </div>
+        <div class="mini-list" id="dashRecurring"></div>
+        <div class="empty-note" id="dashRecurringEmpty" style="display:none;padding:20px 0;">No recurring items yet.</div>
+      </div>
     </div>
   </div>
 
-  <div class="chart-card">
-    <h2>History</h2>
-    <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
-    <div class="empty-note" id="chartEmpty" style="display:none;">No snapshots yet — click "Save Snapshot" below to start your history.</div>
-  </div>
+  <!-- ========== ACCOUNTS ========== -->
+  <div class="panel" id="panel-accounts" role="tabpanel">
+    <div class="panel-header">
+      <div>
+        <span class="eyebrow">Balance sheet</span>
+        <h1>Accounts</h1>
+      </div>
+    </div>
 
-  <div class="ledger-cols">
-    <div class="section assets">
-      <h2>Assets <span class="tally" id="assetsTally"></span></h2>
-      <div id="assetsRows"></div>
-      <button class="add-row" data-type="asset">+ Add asset</button>
+    <div class="summary">
+      <div class="card net">
+        <div class="label">Net Worth</div>
+        <div class="figure" id="accNetWorthFig">$0</div>
+        <div class="delta" id="accNetDelta"></div>
+      </div>
+      <div class="card assets">
+        <div class="label">Total Assets</div>
+        <div class="figure" id="accAssetsFig">$0</div>
+      </div>
+      <div class="card liabilities">
+        <div class="label">Total Liabilities</div>
+        <div class="figure" id="accLiabFig">$0</div>
+      </div>
     </div>
-    <div class="section liabilities">
-      <h2>Liabilities <span class="tally" id="liabTally"></span></h2>
-      <div id="liabRows"></div>
-      <button class="add-row" data-type="liability">+ Add liability</button>
-    </div>
-  </div>
 
-  <div class="actions">
-    <div class="left">
-      <button class="primary" id="snapshotBtn">Save Snapshot</button>
-      <button class="ghost" id="exportBtn">Export JSON</button>
-      <button class="ghost" id="importBtn">Import JSON</button>
-      <input type="file" id="importFile" accept="application/json">
+    <div class="ledger-cols">
+      <div class="section assets">
+        <h2>Assets <span class="tally" id="assetsTally"></span></h2>
+        <div id="assetsRows"></div>
+        <button class="add-row" data-type="asset">+ Add asset</button>
+      </div>
+      <div class="section liabilities">
+        <h2>Liabilities <span class="tally" id="liabTally"></span></h2>
+        <div id="liabRows"></div>
+        <button class="add-row" data-type="liability">+ Add liability</button>
+      </div>
     </div>
-    <span class="save-msg" id="saveMsg">Saved</span>
-  </div>
 
-  <div class="section-header">
-    <div>
-      <span class="eyebrow">Monthly Tracking</span>
-      <h1>Expenses</h1>
+    <div class="actions">
+      <div class="left">
+        <button class="primary" id="snapshotBtn">Save Snapshot</button>
+        <button class="ghost" id="exportBtn">Export JSON</button>
+        <button class="ghost" id="importBtn">Import JSON</button>
+        <input type="file" id="importFile" accept="application/json">
+      </div>
+      <span class="save-msg" id="saveMsg">Saved</span>
     </div>
-  </div>
 
-  <div class="summary summary-4">
-    <div class="card liabilities">
-      <div class="label">This Month</div>
-      <div class="figure" id="expMonthFig">$0</div>
-    </div>
-    <div class="card liabilities">
-      <div class="label">Recurring / Mo</div>
-      <div class="figure" id="expRecurringFig" style="font-size:26px;">$0</div>
-    </div>
-    <div class="card">
-      <div class="label">Top Category</div>
-      <div class="figure" id="expTopCat" style="font-size:19px;">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Transactions</div>
-      <div class="figure" id="expCount" style="font-size:26px;">0</div>
-    </div>
-  </div>
-
-  <div class="ledger-cols">
-    <div class="chart-card" style="margin-bottom:0;">
-      <h2>Monthly Trend</h2>
-      <div class="chart-wrap" style="height:180px;"><canvas id="expenseTrendChart"></canvas></div>
-      <div class="empty-note" id="expTrendEmpty" style="display:none;">Add expenses to see your monthly trend.</div>
-    </div>
-    <div class="section">
-      <h2>By Category <span class="tally" id="expCatTally"></span></h2>
-      <div class="breakdown" id="expBreakdown"></div>
-      <div class="empty-note" id="expBreakdownEmpty" style="display:none;">No expenses logged yet this month.</div>
+    <div class="chart-card" style="margin-top:22px;">
+      <h2>History</h2>
+      <div class="chart-wrap"><canvas id="accountsHistoryChart"></canvas></div>
+      <div class="empty-note" id="accChartEmpty" style="display:none;">No snapshots yet — click “Save Snapshot” above to start your history.</div>
     </div>
   </div>
 
-  <div class="section" style="margin-top:18px;margin-bottom:22px;">
-    <h2>Recurring <span class="tally" id="expRecurringTally"></span></h2>
-    <div id="recurringList"></div>
-    <div class="empty-note" id="recurringEmpty" style="display:none;">Check "Recurring" on an entry below to track it here.</div>
+  <!-- ========== EXPENSES ========== -->
+  <div class="panel" id="panel-expenses" role="tabpanel">
+    <div class="panel-header">
+      <div>
+        <span class="eyebrow">Monthly tracking</span>
+        <h1>Expenses</h1>
+      </div>
+    </div>
+
+    <div class="summary summary-4">
+      <div class="card liabilities">
+        <div class="label">This Month</div>
+        <div class="figure" id="expMonthFig">$0</div>
+      </div>
+      <div class="card liabilities">
+        <div class="label">Recurring / Mo</div>
+        <div class="figure" id="expRecurringFig" style="font-size:26px;">$0</div>
+      </div>
+      <div class="card">
+        <div class="label">Top Category</div>
+        <div class="figure" id="expTopCat" style="font-size:19px;">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Transactions</div>
+        <div class="figure" id="expCount" style="font-size:26px;">0</div>
+      </div>
+    </div>
+
+    <div class="ledger-cols">
+      <div class="chart-card" style="margin-bottom:0;">
+        <h2>Monthly Trend</h2>
+        <div class="chart-wrap" style="height:180px;"><canvas id="expenseTrendChart"></canvas></div>
+        <div class="empty-note" id="expTrendEmpty" style="display:none;">Add expenses to see your monthly trend.</div>
+      </div>
+      <div class="section">
+        <h2>By Category <span class="tally" id="expCatTally"></span></h2>
+        <div class="breakdown" id="expBreakdown"></div>
+        <div class="empty-note" id="expBreakdownEmpty" style="display:none;">No expenses logged yet this month.</div>
+      </div>
+    </div>
+
+    <div class="section" style="margin-top:18px;">
+      <h2>Recurring <span class="tally" id="expRecurringTally"></span></h2>
+      <div id="recurringList"></div>
+      <div class="empty-note" id="recurringEmpty" style="display:none;">Check “Recurring” on an entry below to track it here.</div>
+    </div>
+
+    <div class="section" style="margin-top:18px;">
+      <h2>Entries <span class="tally" id="expTally"></span></h2>
+      <div id="expenseRows"></div>
+      <button class="add-row" id="addExpenseBtn">+ Add expense</button>
+    </div>
   </div>
 
-  <div class="section" style="margin-top:18px;margin-bottom:22px;">
-    <h2>Entries <span class="tally" id="expTally"></span></h2>
-    <div id="expenseRows"></div>
-    <button class="add-row" id="addExpenseBtn">+ Add expense</button>
-  </div>
-
-  <footer>Data is stored locally in this file's browser context. Export regularly to back up into your vault.</footer>
 </div>
+
+<footer>Data is stored locally in this browser. Export regularly to back up.</footer>
 
 <script>
 const STORAGE_KEY = 'ledger-networth-v1';
@@ -389,6 +513,7 @@ function saveData(){
 
 function flashSaved(){
   const el = document.getElementById('saveMsg');
+  if(!el) return;
   el.textContent = 'Saved';
   el.classList.add('show');
   clearTimeout(flashSaved._t);
@@ -409,6 +534,30 @@ function totals(){
   return {assets, liabilities, net: assets-liabilities};
 }
 
+/* ---- Tab switching ---- */
+function switchTab(tabId){
+  document.querySelectorAll('.tab-btn').forEach(b=>{
+    const active = b.dataset.tab === tabId;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('.panel').forEach(p=>{
+    p.classList.toggle('active', p.id === 'panel-' + tabId);
+  });
+  // Re-render charts that may have been hidden (Chart.js needs visible canvas)
+  if(tabId === 'dashboard') renderChart();
+  if(tabId === 'accounts') renderAccountsChart();
+  if(tabId === 'expenses') renderExpenseChart();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> switchTab(btn.dataset.tab));
+});
+document.querySelectorAll('[data-goto]').forEach(btn=>{
+  btn.addEventListener('click', ()=> switchTab(btn.dataset.goto));
+});
+
+/* ---- Accounts / Net Worth ---- */
 function renderRows(){
   const aWrap = document.getElementById('assetsRows');
   const lWrap = document.getElementById('liabRows');
@@ -428,13 +577,13 @@ function renderRows(){
     (acc.type==='asset' ? aWrap : lWrap).appendChild(row);
   });
 
-  document.querySelectorAll('.name, .balance').forEach(el=>{
+  document.querySelectorAll('#assetsRows .name, #assetsRows .balance, #liabRows .name, #liabRows .balance').forEach(el=>{
     el.addEventListener('input', onFieldChange);
   });
-  document.querySelectorAll('.cat').forEach(el=>{
+  document.querySelectorAll('#assetsRows .cat, #liabRows .cat').forEach(el=>{
     el.addEventListener('change', onFieldChange);
   });
-  document.querySelectorAll('.del').forEach(el=>{
+  document.querySelectorAll('#assetsRows .del, #liabRows .del').forEach(el=>{
     el.addEventListener('click', ()=>{
       data.accounts = data.accounts.filter(a=>a.id!==el.dataset.id);
       saveData(); renderAll();
@@ -458,24 +607,33 @@ function onFieldChange(e){
 
 function renderSummary(){
   const t = totals();
+  // Dashboard
   document.getElementById('assetsFig').textContent = fmt(t.assets);
   document.getElementById('liabFig').textContent = fmt(t.liabilities);
   document.getElementById('netWorthFig').textContent = fmt(t.net);
+  // Accounts tab
+  document.getElementById('accAssetsFig').textContent = fmt(t.assets);
+  document.getElementById('accLiabFig').textContent = fmt(t.liabilities);
+  document.getElementById('accNetWorthFig').textContent = fmt(t.net);
 
-  const deltaEl = document.getElementById('netDelta');
-  if(data.history.length){
+  const deltaText = (()=>{
+    if(!data.history.length) return {text:'', cls:'delta'};
     const prev = data.history[data.history.length-1];
     const diff = t.net - prev.netWorth;
     if(Math.abs(diff) > 0.5){
-      deltaEl.textContent = (diff>=0?'▲ ':'▼ ') + fmt(Math.abs(diff)) + ' since last snapshot';
-      deltaEl.className = 'delta ' + (diff>=0?'up':'down');
-    } else {
-      deltaEl.textContent = 'No change since last snapshot';
-      deltaEl.className = 'delta';
+      return {
+        text: (diff>=0?'▲ ':'▼ ') + fmt(Math.abs(diff)) + ' since last snapshot',
+        cls: 'delta ' + (diff>=0?'up':'down')
+      };
     }
-  } else {
-    deltaEl.textContent = '';
-  }
+    return {text:'No change since last snapshot', cls:'delta'};
+  })();
+
+  ['netDelta','accNetDelta'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.textContent = deltaText.text;
+    el.className = deltaText.cls;
+  });
 
   document.getElementById('asOf').textContent = 'As of ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 }
@@ -487,21 +645,19 @@ function renderTallies(){
   document.getElementById('liabTally').textContent = lCount + (lCount===1?' account':' accounts');
 }
 
-let chart;
-function renderChart(){
-  const canvas = document.getElementById('historyChart');
-  const emptyNote = document.getElementById('chartEmpty');
+let chart, accountsChart;
+function makeHistoryChart(canvas, emptyNoteId){
+  const emptyNote = document.getElementById(emptyNoteId);
   if(!data.history.length){
     canvas.style.display='none'; emptyNote.style.display='block';
-    return;
+    return null;
   }
   canvas.style.display='block'; emptyNote.style.display='none';
 
   const labels = data.history.map(h=>new Date(h.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
   const netData = data.history.map(h=>h.netWorth);
 
-  if(chart) chart.destroy();
-  chart = new Chart(canvas.getContext('2d'), {
+  return new Chart(canvas.getContext('2d'), {
     type:'line',
     data:{
       labels,
@@ -530,11 +686,25 @@ function renderChart(){
   });
 }
 
+function renderChart(){
+  const canvas = document.getElementById('historyChart');
+  if(chart) chart.destroy();
+  chart = makeHistoryChart(canvas, 'chartEmpty');
+}
+
+function renderAccountsChart(){
+  const canvas = document.getElementById('accountsHistoryChart');
+  if(accountsChart) accountsChart.destroy();
+  accountsChart = makeHistoryChart(canvas, 'accChartEmpty');
+}
+
 function renderAll(){
   renderRows();
   renderSummary();
   renderTallies();
   renderChart();
+  renderAccountsChart();
+  renderDashExpenses();
 }
 
 /* ---- Expenses ---- */
@@ -600,6 +770,7 @@ function onExpenseFieldChange(e){
   renderExpenseChart();
   renderExpenseTally();
   renderRecurring();
+  renderDashExpenses();
 }
 
 function renderExpenseTally(){
@@ -659,6 +830,7 @@ function renderExpenseChart(){
   const months = Object.keys(byMonth).sort();
   if(!months.length){
     canvas.style.display='none'; emptyNote.style.display='block';
+    if(expenseChart){ expenseChart.destroy(); expenseChart=null; }
     return;
   }
   canvas.style.display='block'; emptyNote.style.display='none';
@@ -684,7 +856,6 @@ function renderExpenseChart(){
 }
 
 function recurringItems(){
-  // Dedupe by category + description, keeping the most recent dated entry's amount.
   const map = {};
   data.expenses.filter(x=>x.recurring).forEach(x=>{
     const key = (x.category||'') + '|' + (x.desc||'').trim().toLowerCase();
@@ -720,6 +891,31 @@ function renderRecurring(){
   `).join('');
 }
 
+function renderDashExpenses(){
+  const monthExp = currentMonthExpenses();
+  const total = monthExp.reduce((s,x)=>s+(Number(x.amount)||0),0);
+  document.getElementById('dashExpMonth').textContent = fmt(total);
+  document.getElementById('dashExpRecurring').textContent = fmt(recurringMonthlyTotal());
+  document.getElementById('dashExpCount').textContent = monthExp.length;
+  const top = categoryTotals(monthExp)[0];
+  document.getElementById('dashExpTop').textContent = top ? top[0] : '—';
+
+  const items = recurringItems().slice(0,5);
+  const wrap = document.getElementById('dashRecurring');
+  const empty = document.getElementById('dashRecurringEmpty');
+  if(!items.length){
+    wrap.innerHTML=''; empty.style.display='block';
+    return;
+  }
+  empty.style.display='none';
+  wrap.innerHTML = items.map(x=>`
+    <div class="row">
+      <span style="flex:1;font-size:13px;">${escapeHtml(x.desc || x.category || 'Untitled')}</span>
+      <span class="val" style="color:var(--liability);">${fmt(x.amount)}</span>
+    </div>
+  `).join('');
+}
+
 function renderExpenseAll(){
   renderExpenseRows();
   renderExpenseSummary();
@@ -727,9 +923,11 @@ function renderExpenseAll(){
   renderExpenseChart();
   renderExpenseTally();
   renderRecurring();
+  renderDashExpenses();
 }
 
-document.querySelectorAll('.add-row').forEach(btn=>{
+/* ---- Event listeners ---- */
+document.querySelectorAll('.add-row[data-type]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     const type = btn.dataset.type;
     data.accounts.push({
@@ -792,6 +990,7 @@ document.getElementById('importFile').addEventListener('change', (e)=>{
   e.target.value = '';
 });
 
+// Initial render
 renderAll();
 renderExpenseAll();
 </script>
