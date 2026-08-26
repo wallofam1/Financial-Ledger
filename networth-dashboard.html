@@ -1389,6 +1389,10 @@ document.querySelectorAll('.subtab-btn').forEach(btn=>{
 /* Accounts */
 const expandedAccounts = new Set();
 
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function renderRows(){
   const aWrap = document.getElementById('assetsRows');
   const lWrap = document.getElementById('liabRows');
