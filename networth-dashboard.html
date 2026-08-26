@@ -307,35 +307,103 @@
 
   /* Entry rows */
   .entry-row {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    padding: 8px 0; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
   }
   .entry-row:last-of-type { border-bottom: none; }
   .entry-row input.exp-date {
     background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary);
     font-family: var(--font); font-size: 13px; padding: 10px 10px; border-radius: var(--radius-sm);
-    width: 140px; min-height: 42px;
+    width: 140px; min-height: 42px; flex-shrink: 0;
   }
   .entry-row select.exp-cat {
     background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
     font-family: var(--font); font-size: 13px; padding: 10px 10px; border-radius: var(--radius-sm);
-    width: 150px; min-height: 42px;
+    width: 150px; min-height: 42px; flex-shrink: 0;
   }
   .entry-row input.exp-desc::placeholder { color: var(--text-tertiary); }
   .entry-row input.exp-desc {
-    flex: 1; min-width: 120px; background: none; border: none; color: var(--text);
+    flex: 1; min-width: 100px; background: none; border: none; color: var(--text);
     font-family: var(--font); font-size: 15px; padding: 8px 2px;
     border-bottom: 1px solid transparent; min-height: 40px;
   }
   .entry-row input.exp-desc:focus { outline: none; border-bottom-color: var(--accent); }
   .entry-row input.exp-amount {
-    width: 110px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    width: 100px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
     font-family: var(--font); font-size: 15px; font-weight: 500;
-    text-align: right; padding: 10px 12px; border-radius: var(--radius-sm); min-height: 42px;
+    text-align: right; padding: 10px 12px; border-radius: var(--radius-sm); min-height: 42px; flex-shrink: 0;
   }
   .entry-row input:focus, .entry-row select:focus {
     outline: none; border-color: var(--accent);
   }
+  .entry-row select.exp-freq {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 10px 8px; border-radius: var(--radius-sm);
+    width: 110px; min-height: 42px; flex-shrink: 0;
+  }
+  .entry-row select.exp-freq:focus { outline: none; border-color: var(--accent); }
+  .entry-row .del { flex-shrink: 0; }
+
+  /* Mobile: stacked card layout for entries */
+  @media (max-width: 640px) {
+    .entry-row {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr auto;
+      grid-template-areas:
+        "date  cat   del"
+        "desc  desc  desc"
+        "amount freq  freq";
+      gap: 8px 8px;
+      padding: 16px 0;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+    .entry-row input.exp-date {
+      grid-area: date;
+      width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box;
+    }
+    .entry-row select.exp-cat {
+      grid-area: cat;
+      width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box;
+    }
+    .entry-row input.exp-desc {
+      grid-area: desc;
+      width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 15px;
+    }
+    .entry-row input.exp-desc:focus {
+      border-color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .entry-row input.exp-amount {
+      grid-area: amount;
+      width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box;
+    }
+    .entry-row select.exp-freq {
+      grid-area: freq;
+      width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box;
+    }
+    .entry-row .del {
+      grid-area: del;
+      justify-self: end;
+      align-self: center;
+    }
+  }
+
   .exp-recurring-label {
     display: flex; align-items: center; gap: 6px; cursor: pointer;
     font-size: 12px; color: var(--text-secondary); white-space: nowrap;
@@ -640,12 +708,6 @@
   }
 
 
-  .entry-row select.exp-freq {
-    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
-    font-family: var(--font); font-size: 12px; padding: 10px 8px; border-radius: var(--radius-sm);
-    width: 110px; min-height: 42px;
-  }
-  .entry-row select.exp-freq:focus { outline: none; border-color: var(--accent); }
 
 </style>
 </head>
