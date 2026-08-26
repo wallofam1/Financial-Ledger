@@ -348,62 +348,81 @@
   @media (max-width: 640px) {
     .entry-row {
       display: grid !important;
-      grid-template-columns: 1fr 1fr auto;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 36px;
       grid-template-areas:
         "date  cat   del"
         "desc  desc  desc"
         "amount freq  freq";
-      gap: 8px 8px;
+      gap: 10px 8px;
       padding: 16px 0;
-      align-items: center;
-      flex-wrap: nowrap;
+      align-items: stretch;
+      flex-wrap: nowrap !important;
+    }
+    .entry-row > * {
+      max-width: 100%;
+      box-sizing: border-box;
     }
     .entry-row input.exp-date {
-      grid-area: date;
+      grid-area: date !important;
       width: 100% !important;
+      max-width: 100% !important;
       min-width: 0 !important;
-      box-sizing: border-box;
+      font-size: 13px !important;
+      padding: 10px 8px !important;
     }
     .entry-row select.exp-cat {
-      grid-area: cat;
+      grid-area: cat !important;
       width: 100% !important;
+      max-width: 100% !important;
       min-width: 0 !important;
-      box-sizing: border-box;
+      font-size: 13px !important;
+      padding: 10px 6px !important;
     }
     .entry-row input.exp-desc {
-      grid-area: desc;
+      grid-area: desc !important;
       width: 100% !important;
+      max-width: 100% !important;
       min-width: 0 !important;
-      box-sizing: border-box;
-      background: var(--bg-input);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px 12px;
-      font-size: 15px;
+      background: var(--bg-input) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: var(--radius-sm) !important;
+      padding: 10px 12px !important;
+      font-size: 15px !important;
     }
     .entry-row input.exp-desc:focus {
-      border-color: var(--accent);
-      border-bottom-color: var(--accent);
+      border-color: var(--accent) !important;
     }
     .entry-row input.exp-amount {
-      grid-area: amount;
+      grid-area: amount !important;
       width: 100% !important;
+      max-width: 100% !important;
       min-width: 0 !important;
-      box-sizing: border-box;
     }
     .entry-row select.exp-freq {
-      grid-area: freq;
+      grid-area: freq !important;
       width: 100% !important;
+      max-width: 100% !important;
       min-width: 0 !important;
-      box-sizing: border-box;
     }
     .entry-row .del {
-      grid-area: del;
-      justify-self: end;
+      grid-area: del !important;
+      justify-self: center;
       align-self: center;
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      min-height: 32px;
+    }
+    /* iOS date input often has huge intrinsic width */
+    .entry-row input.exp-date {
+      -webkit-appearance: none;
+      appearance: none;
+      min-width: 0 !important;
+    }
+    .entry-row input[type="date"]::-webkit-date-and-time-value {
+      text-align: left;
     }
   }
-
   .exp-recurring-label {
     display: flex; align-items: center; gap: 6px; cursor: pointer;
     font-size: 12px; color: var(--text-secondary); white-space: nowrap;
