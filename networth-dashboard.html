@@ -1490,8 +1490,14 @@ function flashSaved(){
 }
 
 function fmt(n){
-  const sign = n < 0 ? '-' : '';
-  return sign + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
+  const num = Number(n) || 0;
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num);
+  // Keep cents when present (expenses like 19.99); whole dollars stay clean
+  if(Math.round(abs * 100) % 100 !== 0){
+    return sign + '$' + abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return sign + '$' + Math.round(abs).toLocaleString('en-US');
 }
 
 function accountBalance(acc){
@@ -1594,8 +1600,11 @@ function switchTab(tabId){
   if(tabId === 'cashflow'){
     if(typeof renderExpenseAll === 'function') renderExpenseAll();
     if(typeof renderIncomeAll === 'function') renderIncomeAll();
-    if(typeof renderExpenseChart === 'function') renderExpenseChart();
-    if(typeof renderIncomeChart === 'function') renderIncomeChart();
+    // Charts need the panel visible to measure size
+    requestAnimationFrame(()=>{
+      if(typeof renderExpenseChart === 'function') renderExpenseChart();
+      if(typeof renderIncomeChart === 'function') renderIncomeChart();
+    });
     if(syncEnabled) pullFromCloud(false, true);
   }
 }
@@ -2098,37 +2107,50 @@ function renderBreakdown(prefix){
 
 
 function makeTrendChart(canvas, emptyNoteId, collection, color){
+  if(!canvas) return null;
   const emptyNote = document.getElementById(emptyNoteId);
   const byMonth = {};
-  data[collection].forEach(x=>{
+  (data[collection]||[]).forEach(x=>{
     const mk = monthKeyOf(x.date);
     if(!mk) return;
     byMonth[mk] = (byMonth[mk]||0) + (Number(x.amount)||0);
   });
   const months = Object.keys(byMonth).sort();
   if(!months.length){
-    canvas.style.display='none'; emptyNote.style.display='block';
+    canvas.style.display='none';
+    if(emptyNote) emptyNote.style.display='block';
     return null;
   }
-  canvas.style.display='block'; emptyNote.style.display='none';
+  canvas.style.display='block';
+  if(emptyNote) emptyNote.style.display='none';
+  // Ensure parent has height before Chart.js measures it
+  const wrap = canvas.parentElement;
+  if(wrap && (!wrap.style.height || wrap.clientHeight < 40)){
+    wrap.style.height = '180px';
+  }
   const colors = getChartColors();
   const labels = months.map(m=>{
     const [y,mo] = m.split('-');
     return new Date(Number(y), Number(mo)-1, 1).toLocaleDateString('en-US',{month:'short',year:'2-digit'});
   });
   const values = months.map(m=>byMonth[m]);
-  return new Chart(canvas.getContext('2d'), {
+  const chart = new Chart(canvas.getContext('2d'), {
     type:'bar',
     data:{ labels, datasets:[{ label:'Total', data:values, backgroundColor: color, borderRadius: 6, maxBarThickness: 32 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
+      animation: { duration: 300 },
       plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>fmt(ctx.parsed.y)}} },
       scales:{
         x:{ ticks:{ color: colors.tick, font:{ family: 'Inter', size: 11 } }, grid:{ display:false } },
-        y:{ ticks:{ color: colors.tick, font:{ family: 'Inter', size: 11 }, callback:(v)=>fmt(v) }, grid:{ color: colors.grid } }
+        y:{ ticks:{ color: colors.tick, font:{ family: 'Inter', size: 11 }, callback:(v)=>fmt(v) }, grid:{ color: colors.grid }, beginAtZero: true }
       }
     }
   });
+  // Force resize after layout (fixes blank chart when tab was hidden)
+  requestAnimationFrame(()=>{ try { chart.resize(); } catch(e){} });
+  setTimeout(()=>{ try { chart.resize(); } catch(e){} }, 50);
+  return chart;
 }
 
 function renderExpenseChart(){
@@ -2237,6 +2259,10 @@ function renderIncomeSummary(){
   document.getElementById('incRecurringFig').textContent = fmt(recurringMonthlyTotal('incomes'));
   const top = categoryTotals(monthInc)[0];
   document.getElementById('incTopCat').textContent = top ? top[0] : '—';
+  const labEl = document.querySelector('#sub-income .card.income .label, #sub-income .card .label');
+  // first card label in income subpanel
+  const firstLabel = document.querySelector('#sub-income .summary .card .label');
+  if(firstLabel) firstLabel.textContent = monthLabel(activeMonthKey('incomes'));
 }
 
 function renderIncomeTally(){
