@@ -230,7 +230,7 @@
   .section h2 .tally {
     font-weight: 400; font-size: 13px; color: var(--text-tertiary); margin-left: 6px;
   }
-  .chart-wrap { height: 220px; }
+  .chart-wrap { height: 220px; width: 100%; max-width: 100%; overflow: hidden; }
   .empty-note {
     color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 40px 0;
   }
@@ -238,7 +238,10 @@
   .ledger-cols {
     display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;
   }
-  @media (max-width: 640px) { .ledger-cols { grid-template-columns: 1fr; } }
+  .ledger-cols > * { min-width: 0; max-width: 100%; }
+  @media (max-width: 820px) {
+    .ledger-cols { grid-template-columns: 1fr; }
+  }
 
   .row {
     display: flex; align-items: center; gap: 8px;
@@ -517,15 +520,28 @@
   .breakdown-row { margin-bottom: 14px; }
   .breakdown-row:last-child { margin-bottom: 0; }
   .breakdown-row .bd-top {
-    display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 10px; font-size: 13px; margin-bottom: 6px;
   }
-  .breakdown-row .bd-top .bd-cat { color: var(--text); font-weight: 500; }
-  .breakdown-row .bd-top .bd-amt { color: var(--text-secondary); }
+  .breakdown-row .bd-top .bd-cat {
+    color: var(--text); font-weight: 500;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .breakdown-row .bd-top .bd-amt {
+    color: var(--text-secondary); flex-shrink: 0; white-space: nowrap;
+  }
   .bar-track {
     height: 5px; background: var(--bg-input); border-radius: 3px; overflow: hidden;
+    width: 100%;
   }
   .bar-fill { height: 100%; background: var(--red); border-radius: 3px; }
   .bar-fill.income { background: var(--green); }
+
+  .section h2, .chart-card h2 {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px;
+    overflow: visible;
+  }
+  .breakdown { overflow: visible; width: 100%; }
 
   .dash-grid {
     display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-bottom: 16px;
