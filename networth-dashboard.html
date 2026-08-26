@@ -345,51 +345,30 @@
   .entry-row select.exp-freq:focus { outline: none; border-color: var(--accent); }
   .entry-row .del { flex-shrink: 0; }
 
-  /* Mobile: compact stacked cards for entries (match Accounts density) */
+  /* Mobile layouts: compact, no overlap */
   @media (max-width: 640px) {
+    .card { padding: 12px; }
+    .panel-header { margin-bottom: 14px; }
+    .panel-header h1 { font-size: 26px; }
+
+    /* ---- Cash Flow entries ---- */
     .entry-row {
       display: grid !important;
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 28px;
+      grid-template-columns: 1fr 1fr 28px;
       grid-template-areas:
-        "date  cat   del"
-        "desc  desc  desc"
-        "amount freq  freq";
-      gap: 6px 6px;
+        "desc desc del"
+        "date cat cat"
+        "amount freq freq";
+      gap: 6px;
       padding: 10px 0;
       align-items: center;
       flex-wrap: nowrap !important;
     }
-    .entry-row > * {
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-    .entry-row input.exp-date,
-    .entry-row select.exp-cat,
-    .entry-row input.exp-amount,
-    .entry-row select.exp-freq {
-      min-height: 36px !important;
-      font-size: 16px !important; /* prevents iOS focus-zoom */
-      padding: 6px 8px !important;
-    }
-    .entry-row input.exp-date {
-      grid-area: date !important;
-      width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
-      -webkit-appearance: none;
-      appearance: none;
-    }
-    .entry-row select.exp-cat {
-      grid-area: cat !important;
-      width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
-    }
+    .entry-row > * { max-width: 100%; box-sizing: border-box; min-width: 0 !important; }
+
     .entry-row input.exp-desc {
       grid-area: desc !important;
       width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
       background: var(--bg-input) !important;
       border: 1px solid var(--border) !important;
       border-radius: var(--radius-sm) !important;
@@ -397,108 +376,127 @@
       font-size: 16px !important;
       min-height: 36px !important;
     }
-    .entry-row input.exp-desc:focus {
-      border-color: var(--accent) !important;
+    .entry-row input.exp-date {
+      grid-area: date !important;
+      width: 100% !important;
+      font-size: 16px !important;
+      min-height: 36px !important;
+      padding: 6px 8px !important;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .entry-row select.exp-cat {
+      grid-area: cat !important;
+      width: 100% !important;
+      font-size: 16px !important;
+      min-height: 36px !important;
+      padding: 6px 8px !important;
     }
     .entry-row input.exp-amount {
       grid-area: amount !important;
       width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
+      font-size: 16px !important;
+      min-height: 36px !important;
+      padding: 6px 8px !important;
     }
     .entry-row select.exp-freq {
       grid-area: freq !important;
       width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
+      font-size: 16px !important;
+      min-height: 36px !important;
+      padding: 6px 8px !important;
     }
     .entry-row .del {
       grid-area: del !important;
-      justify-self: center;
+      justify-self: end;
       align-self: center;
-      width: 28px;
-      height: 28px;
-      min-width: 28px !important;
-      min-height: 28px !important;
-      padding: 4px !important;
-      font-size: 14px;
-    }
-    .entry-row input[type="date"]::-webkit-date-and-time-value {
-      text-align: left;
+      width: 28px; height: 28px;
+      min-width: 28px !important; min-height: 28px !important;
+      padding: 0 !important; font-size: 14px;
     }
 
-    /* Accounts: prevent horizontal overflow / forced zoom-out */
+    /* ---- Accounts rows (assets with expand) ---- */
     .account-block .row {
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 8px 0;
+      display: grid !important;
+      grid-template-columns: 28px minmax(0, 1fr) 28px;
+      grid-template-areas:
+        "exp name del"
+        "cat bal bal";
+      gap: 6px 8px;
+      padding: 10px 0;
+      align-items: center;
+      flex-wrap: nowrap !important;
     }
-    .account-block .row input.name {
-      flex: 1 1 120px;
-      min-width: 0;
-      font-size: 16px;
-      min-height: 36px;
-      padding: 6px 2px;
-    }
-    .account-block .row select.cat {
-      flex: 0 1 100px;
-      max-width: 42%;
-      min-width: 0;
-      width: auto;
-      font-size: 16px;
-      min-height: 36px;
-      padding: 6px 8px;
-    }
-    .account-block .row input.balance {
-      flex: 0 1 88px;
-      width: 88px;
-      max-width: 30%;
-      min-width: 0;
-      font-size: 16px;
-      min-height: 36px;
-      padding: 6px 8px;
+    /* Liabilities: no expand button */
+    .account-block .row:not(:has(.expand-btn)) {
+      grid-template-columns: minmax(0, 1fr) 28px;
+      grid-template-areas:
+        "name del"
+        "cat bal";
     }
     .account-block .row .expand-btn {
-      flex: 0 0 28px;
-      min-width: 28px;
-      min-height: 28px;
-      padding: 4px;
+      grid-area: exp;
+      width: 28px; height: 28px; min-width: 28px; padding: 0;
+      justify-self: center;
+    }
+    .account-block .row input.name {
+      grid-area: name;
+      width: 100% !important;
+      min-width: 0 !important;
+      flex: none !important;
+      font-size: 16px !important;
+      min-height: 36px;
+      padding: 6px 4px !important;
+    }
+    .account-block .row select.cat {
+      grid-area: cat;
+      width: 100% !important;
+      max-width: none !important;
+      min-width: 0 !important;
+      font-size: 16px !important;
+      min-height: 36px;
+      padding: 6px 8px !important;
+    }
+    .account-block .row input.balance {
+      grid-area: bal;
+      width: 100% !important;
+      max-width: none !important;
+      min-width: 0 !important;
+      font-size: 16px !important;
+      min-height: 36px;
+      padding: 6px 8px !important;
     }
     .account-block .row .del {
-      flex: 0 0 28px;
-      min-width: 28px !important;
-      min-height: 28px !important;
-      padding: 4px !important;
+      grid-area: del;
+      justify-self: end;
+      width: 28px; height: 28px;
+      min-width: 28px !important; min-height: 28px !important;
+      padding: 0 !important;
     }
-    .liab-extras {
-      flex: 1 1 100%;
+    /* Liability extra fields full width under the row */
+    .account-block .row .liab-extras {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 6px;
       width: 100%;
-      margin-top: 2px;
+      margin-top: 0;
     }
-    .liab-extras input {
+    .account-block .row .liab-extras input {
       flex: 1;
       min-width: 0;
-      width: auto;
-      font-size: 16px;
+      width: auto !important;
+      font-size: 16px !important;
       min-height: 36px;
     }
-    .holding-row {
-      flex-wrap: wrap;
-    }
-    .holding-row input {
-      font-size: 16px !important;
-      min-height: 34px;
-    }
-    .holding-row input.h-name { flex: 1 1 100%; min-width: 0; }
-    .holding-row input.h-ticker { width: 72px; flex: 0 0 72px; }
-    .holding-row input.h-units { width: 72px; flex: 0 0 72px; }
-    .holding-row input.h-value { width: 88px; flex: 0 0 88px; }
 
-    /* Slightly tighter cards/padding on mobile overall */
-    .card { padding: 14px; }
-    .panel-header { margin-bottom: 16px; }
-    .panel-header h1 { font-size: 28px; }
+    .holding-row { flex-wrap: wrap; gap: 6px; }
+    .holding-row input { font-size: 16px !important; min-height: 34px; min-width: 0; }
+    .holding-row input.h-name { flex: 1 1 100%; }
+    .holding-row input.h-ticker,
+    .holding-row input.h-units { width: calc(33% - 6px); flex: 1 1 30%; }
+    .holding-row input.h-value { width: calc(34% - 6px); flex: 1 1 30%; }
   }
+
   .exp-recurring-label {
     display: flex; align-items: center; gap: 6px; cursor: pointer;
     font-size: 12px; color: var(--text-secondary); white-space: nowrap;
