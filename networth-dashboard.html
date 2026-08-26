@@ -1,423 +1,576 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root{
-    --bg:#12151A;
-    --surface:#1B1F26;
-    --surface-2:#20242C;
-    --hairline:#2B313B;
-    --ink:#EDEAE2;
-    --ink-muted:#8B93A1;
-    --asset:#6E9D60;
-    --asset-dim:#4C7440;
-    --liability:#A87A9E;
-    --liability-dim:#7A576F;
-    --gold:#8FA3C7;
-    --income:#5B9A8B;
-    --radius:10px;
-    --nav-h:52px;
-    --bottom-nav-h:64px;
+  :root, [data-theme="dark"] {
+    --bg: #0c0c0e;
+    --bg-elevated: #161618;
+    --bg-card: #1c1c1e;
+    --bg-input: #2c2c2e;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #f5f5f7;
+    --text-secondary: #98989d;
+    --text-tertiary: #636366;
+    --accent: #0a84ff;
+    --accent-soft: rgba(10,132,255,0.15);
+    --green: #8a9490;
+    --green-soft: rgba(138,148,144,0.12);
+    --red: #9a8e8c;
+    --red-soft: rgba(154,142,140,0.12);
+    --orange: #ff9f0a;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-lg: 16px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    --nav-h: 52px;
+    --bottom-nav-h: 64px;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
-  body{
-    background:var(--bg);
-    color:var(--ink);
-    font-family:'Public Sans', -apple-system, sans-serif;
-    min-height:100vh;
-    padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 20px);
-  }
-  @media (min-width:641px){
-    body{padding-bottom:40px;}
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
   }
 
-  /* ========== Top Nav (desktop) ========== */
-  .topnav{
-    position:sticky;top:0;z-index:100;
-    background:rgba(18,21,26,0.92);
-    backdrop-filter:blur(12px);
-    border-bottom:1px solid var(--hairline);
-    padding:0 20px;
+  [data-theme="light"] {
+    --bg: #f5f5f7;
+    --bg-elevated: #ffffff;
+    --bg-card: #ffffff;
+    --bg-input: #f0f0f2;
+    --border: rgba(0,0,0,0.06);
+    --border-strong: rgba(0,0,0,0.12);
+    --text: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --text-tertiary: #86868b;
+    --accent: #0071e3;
+    --accent-soft: rgba(0,113,227,0.1);
+    --green: #6b7370;
+    --green-soft: rgba(107,115,112,0.1);
+    --red: #7a6e6c;
+    --red-soft: rgba(122,110,108,0.1);
+    --orange: #ff9500;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   }
-  .topnav-inner{
-    max-width:920px;margin:0 auto;
-    display:flex;align-items:center;justify-content:space-between;
-    height:var(--nav-h);gap:16px;
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.47;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+    padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 24px);
+    transition: background 0.25s ease, color 0.25s ease;
   }
-  .brand{display:flex;align-items:baseline;gap:10px;flex-shrink:0;}
-  .brand .logo{
-    font-family:'Fraunces', serif;font-weight:600;font-size:20px;
-    letter-spacing:0.01em;color:var(--ink);
+  @media (min-width: 641px) {
+    body { padding-bottom: 48px; }
   }
-  .brand .tag{
-    font-family:'IBM Plex Mono', monospace;font-size:10px;
-    letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-muted);
+
+  /* ========== Top Nav ========== */
+  .topnav {
+    position: sticky; top: 0; z-index: 100;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
   }
-  .tabs{
-    display:flex;gap:2px;background:var(--surface);
-    border:1px solid var(--hairline);border-radius:8px;padding:3px;
+  .topnav-inner {
+    max-width: 980px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    height: var(--nav-h); gap: 20px;
   }
-  .tab-btn{
-    font-family:'IBM Plex Mono', monospace;font-size:12px;font-weight:500;
-    letter-spacing:0.04em;text-transform:uppercase;
-    background:transparent;border:none;color:var(--ink-muted);
-    padding:7px 14px;border-radius:6px;cursor:pointer;
-    transition:color .15s, background .15s;
+  .brand {
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
   }
-  .tab-btn:hover{color:var(--ink);}
-  .tab-btn.active{
-    background:var(--surface-2);color:var(--ink);
-    box-shadow:0 1px 0 rgba(0,0,0,0.2);
+  .brand .logo {
+    font-weight: 600; font-size: 17px; letter-spacing: -0.02em;
+    color: var(--text);
   }
-  .as-of{
-    font-family:'IBM Plex Mono', monospace;font-size:11px;
-    color:var(--ink-muted);white-space:nowrap;
+  .tabs {
+    display: flex; gap: 2px;
+    background: var(--bg-input);
+    border-radius: 9px; padding: 3px;
   }
-  @media (max-width:640px){
-    .topnav{display:none;}
+  .tab-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; border: none; color: var(--text-secondary);
+    padding: 6px 14px; border-radius: 7px; cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active {
+    background: var(--bg-card);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+  .nav-right {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .as-of {
+    font-size: 12px; color: var(--text-tertiary); white-space: nowrap;
+  }
+  .theme-toggle {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg-input); border: none;
+    color: var(--text-secondary); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; transition: background 0.15s, color 0.15s;
+  }
+  .theme-toggle:hover { background: var(--border-strong); color: var(--text); }
+  @media (max-width: 640px) {
+    .topnav { display: none; }
   }
 
   /* ========== Bottom Nav (mobile) ========== */
-  .bottomnav{
-    display:none;
-    position:fixed;bottom:0;left:0;right:0;z-index:100;
-    background:rgba(18,21,26,0.96);
-    backdrop-filter:blur(14px);
-    border-top:1px solid var(--hairline);
+  .bottomnav {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 1px solid var(--border);
     padding-bottom: var(--safe-bottom);
   }
-  .bottomnav-inner{
-    display:flex;justify-content:space-around;align-items:stretch;
-    height:var(--bottom-nav-h);
+  .bottomnav-inner {
+    display: flex; justify-content: space-around; align-items: stretch;
+    height: var(--bottom-nav-h);
   }
-  .bnav-btn{
-    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:3px;background:none;border:none;color:var(--ink-muted);
-    font-family:'IBM Plex Mono', monospace;font-size:10px;letter-spacing:0.06em;
-    text-transform:uppercase;cursor:pointer;padding:8px 4px;
-    -webkit-tap-highlight-color:transparent;
+  .bnav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; background: none; border: none; color: var(--text-tertiary);
+    font-family: var(--font); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.01em; cursor: pointer; padding: 8px 4px;
+    -webkit-tap-highlight-color: transparent;
   }
-  .bnav-btn.active{color:var(--gold);}
-  .bnav-btn .ico{font-size:18px;line-height:1;}
-  @media (max-width:640px){
-    .bottomnav{display:block;}
+  .bnav-btn.active { color: var(--accent); }
+  .bnav-btn .ico { font-size: 20px; line-height: 1; }
+  @media (max-width: 640px) {
+    .bottomnav { display: block; }
   }
 
   /* ========== Layout ========== */
-  .wrap{max-width:920px;margin:0 auto;padding:24px 20px 0;}
-  @media (max-width:640px){.wrap{padding-top:16px;}}
-  .panel{display:none;}
-  .panel.active{display:block;}
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px 0; }
+  @media (max-width: 640px) { .wrap { padding: 16px 16px 0; } }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .panel-header {
+    margin-bottom: 24px;
+  }
+  .panel-header .eyebrow {
+    font-size: 12px; font-weight: 500; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--text-tertiary);
+    display: block; margin-bottom: 4px;
+  }
+  .panel-header h1 {
+    font-weight: 600; font-size: 28px; letter-spacing: -0.03em;
+    margin: 0; color: var(--text);
+  }
 
   /* Cards */
-  .card{
-    background:var(--surface);
-    border:1px solid var(--hairline);
-    border-radius:var(--radius);
-    padding:18px 20px;
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
   }
-  .card .label{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:11px;letter-spacing:0.1em;text-transform:uppercase;
-    color:var(--ink-muted);margin-bottom:8px;
+  .card .label {
+    font-size: 12px; font-weight: 500; letter-spacing: 0.02em;
+    color: var(--text-secondary); margin-bottom: 6px;
   }
-  .card .figure{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:28px;font-weight:600;line-height:1.1;
+  .card .figure {
+    font-size: 28px; font-weight: 600; letter-spacing: -0.03em;
+    line-height: 1.15; color: var(--text);
   }
-  .card.net .figure{color:var(--gold);font-size:32px;}
-  .card .delta{
-    font-family:'IBM Plex Mono', monospace;font-size:12px;margin-top:8px;
+  .card.net .figure { font-size: 32px; }
+  .card .delta {
+    font-size: 13px; font-weight: 500; margin-top: 8px;
   }
-  .delta.up{color:var(--asset);}
-  .delta.down{color:var(--liability);}
-  .card.assets .figure, .card.income .figure{color:var(--asset);}
-  .card.liabilities .figure, .card.expense .figure{color:var(--liability);}
-  .card.cashflow .figure{color:var(--gold);}
+  .delta.up { color: var(--green); }
+  .delta.down { color: var(--red); }
+  .card.assets .figure, .card.income .figure { color: var(--green); }
+  .card.liabilities .figure, .card.expense .figure { color: var(--red); }
+  .card.cashflow .figure { color: var(--text); }
 
-  .summary{
-    display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px;
-    margin-bottom:22px;
+  .summary {
+    display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px;
+    margin-bottom: 20px;
   }
-  @media (max-width:640px){.summary{grid-template-columns:1fr;gap:10px;}}
-  .summary-4{grid-template-columns:1fr 1fr 1fr 1fr;}
-  @media (max-width:640px){.summary-4{grid-template-columns:1fr 1fr;}}
-  .summary-2{grid-template-columns:1fr 1fr;}
+  @media (max-width: 640px) {
+    .summary { grid-template-columns: 1fr; gap: 10px; }
+  }
+  .summary-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  @media (max-width: 640px) { .summary-4 { grid-template-columns: 1fr 1fr; } }
+  .summary-2 { grid-template-columns: 1fr 1fr; }
 
-  .chart-card, .section{
-    background:var(--surface);border:1px solid var(--hairline);
-    border-radius:var(--radius);padding:18px 20px;margin-bottom:18px;
+  .chart-card, .section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
   }
-  .chart-card h2, .section h2{
-    font-family:'Fraunces', serif;font-weight:500;font-size:16px;
-    margin:0 0 14px;color:var(--ink);
+  .chart-card h2, .section h2 {
+    font-weight: 600; font-size: 15px; letter-spacing: -0.01em;
+    margin: 0 0 16px; color: var(--text);
   }
-  .section h2 .tally{
-    font-family:'IBM Plex Mono', monospace;font-weight:400;
-    font-size:12px;color:var(--ink-muted);margin-left:8px;
+  .section h2 .tally {
+    font-weight: 400; font-size: 13px; color: var(--text-tertiary); margin-left: 6px;
   }
-  .chart-wrap{height:220px;}
-  .empty-note{
-    font-family:'IBM Plex Mono', monospace;color:var(--ink-muted);
-    font-size:12px;text-align:center;padding:40px 0;
+  .chart-wrap { height: 220px; }
+  .empty-note {
+    color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 40px 0;
   }
 
-  .ledger-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
-  @media (max-width:640px){.ledger-cols{grid-template-columns:1fr;}}
+  .ledger-cols {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;
+  }
+  @media (max-width: 640px) { .ledger-cols { grid-template-columns: 1fr; } }
 
-  .row{
-    display:flex;align-items:center;gap:8px;
-    padding:10px 0;border-bottom:1px dashed var(--hairline);
+  .row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
   }
-  .row:last-of-type{border-bottom:none;}
-  .row input.name{
-    flex:1;background:none;border:none;color:var(--ink);
-    font-family:'Public Sans';font-size:15px;padding:6px 2px;
-    border-bottom:1px solid transparent;min-height:40px;
+  .row:last-of-type { border-bottom: none; }
+  .row input.name {
+    flex: 1; background: none; border: none; color: var(--text);
+    font-family: var(--font); font-size: 15px; padding: 8px 2px;
+    border-bottom: 1px solid transparent; min-height: 40px;
   }
-  .row input.name:focus{outline:none;border-bottom:1px solid var(--hairline);}
-  select.cat{
-    background:var(--surface-2);border:1px solid var(--hairline);
-    color:var(--ink-muted);font-family:'IBM Plex Mono';font-size:12px;
-    border-radius:6px;padding:8px 8px;max-width:120px;min-height:40px;
+  .row input.name:focus { outline: none; border-bottom-color: var(--accent); }
+  select.cat {
+    background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--text-secondary); font-family: var(--font); font-size: 12px;
+    border-radius: var(--radius-sm); padding: 8px 10px; max-width: 120px; min-height: 40px;
   }
-  .row input.balance{
-    width:110px;background:var(--surface-2);border:1px solid var(--hairline);
-    color:var(--ink);font-family:'IBM Plex Mono';font-size:15px;
-    text-align:right;padding:8px 10px;border-radius:6px;min-height:40px;
+  .row input.balance {
+    width: 110px; background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font); font-size: 15px; font-weight: 500;
+    text-align: right; padding: 8px 12px; border-radius: var(--radius-sm); min-height: 40px;
   }
-  .row .del, .entry-row .del{
-    background:none;border:none;color:var(--ink-muted);
-    cursor:pointer;font-size:18px;padding:8px 10px;line-height:1;
-    min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;
+  .row input.balance:focus, select.cat:focus {
+    outline: none; border-color: var(--accent);
   }
-  .row .del:hover, .entry-row .del:hover{color:var(--liability);}
-  .add-row{
-    margin-top:10px;background:none;border:1px dashed var(--hairline);
-    color:var(--ink-muted);font-family:'IBM Plex Mono';font-size:13px;
-    padding:12px 12px;border-radius:6px;cursor:pointer;width:100%;
-    min-height:44px;
+  .row .del, .entry-row .del {
+    background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; font-size: 16px; padding: 8px 10px; line-height: 1;
+    min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; transition: color 0.15s, background 0.15s;
   }
-  .add-row:hover{color:var(--ink);border-color:var(--ink-muted);}
-  .section.assets h2{color:var(--asset);}
-  .section.liabilities h2{color:var(--liability);}
-  .section.income h2{color:var(--income);}
-  .section.expense h2{color:var(--liability);}
+  .row .del:hover, .entry-row .del:hover {
+    color: var(--red); background: var(--red-soft);
+  }
+  .add-row {
+    margin-top: 12px; background: none; border: 1px dashed var(--border-strong);
+    color: var(--text-secondary); font-family: var(--font); font-size: 13px; font-weight: 500;
+    padding: 12px; border-radius: var(--radius-sm); cursor: pointer; width: 100%;
+    min-height: 44px; transition: color 0.15s, border-color 0.15s;
+  }
+  .add-row:hover { color: var(--accent); border-color: var(--accent); }
 
-  .actions{
-    display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;
-    align-items:center;margin-top:4px;margin-bottom:8px;
+  .actions {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: space-between;
+    align-items: center; margin-top: 4px; margin-bottom: 8px;
   }
-  .actions .left{display:flex;gap:10px;flex-wrap:wrap;}
-  button.primary{
-    background:var(--gold);color:#1B1B16;border:none;
-    font-family:'IBM Plex Mono';font-weight:600;font-size:12px;
-    letter-spacing:0.04em;text-transform:uppercase;
-    padding:12px 18px;border-radius:6px;cursor:pointer;min-height:44px;
+  .actions .left { display: flex; gap: 10px; flex-wrap: wrap; }
+  button.primary {
+    background: var(--accent); color: #fff; border: none;
+    font-family: var(--font); font-weight: 600; font-size: 13px;
+    padding: 11px 18px; border-radius: 980px; cursor: pointer; min-height: 40px;
+    transition: opacity 0.15s;
   }
-  button.primary:hover{filter:brightness(1.08);}
-  button.ghost{
-    background:none;border:1px solid var(--hairline);color:var(--ink-muted);
-    font-family:'IBM Plex Mono';font-size:12px;padding:12px 16px;
-    border-radius:6px;cursor:pointer;min-height:44px;
+  button.primary:hover { opacity: 0.88; }
+  button.ghost {
+    background: var(--bg-input); border: none; color: var(--text);
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    padding: 11px 16px; border-radius: 980px; cursor: pointer; min-height: 40px;
+    transition: background 0.15s;
   }
-  button.ghost:hover{color:var(--ink);border-color:var(--ink-muted);}
-  .save-msg{
-    font-family:'IBM Plex Mono';font-size:11px;color:var(--asset);
-    opacity:0;transition:opacity .3s;
+  button.ghost:hover { background: var(--border-strong); }
+  .save-msg {
+    font-size: 12px; color: var(--green); opacity: 0; transition: opacity 0.3s;
   }
-  .save-msg.show{opacity:1;}
-  #importFile{display:none;}
+  .save-msg.show { opacity: 1; }
+  #importFile { display: none; }
 
-  /* Entry rows (expenses / incomes) */
-  .entry-row{
-    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-    padding:10px 0;border-bottom:1px dashed var(--hairline);
+  /* Entry rows */
+  .entry-row {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
   }
-  .entry-row:last-of-type{border-bottom:none;}
-  .entry-row input.exp-date{
-    background:var(--surface-2);border:1px solid var(--hairline);color:var(--ink-muted);
-    font-family:'IBM Plex Mono';font-size:12px;padding:10px 8px;border-radius:6px;width:140px;min-height:42px;
+  .entry-row:last-of-type { border-bottom: none; }
+  .entry-row input.exp-date {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary);
+    font-family: var(--font); font-size: 13px; padding: 10px 10px; border-radius: var(--radius-sm);
+    width: 140px; min-height: 42px;
   }
-  .entry-row select.exp-cat{
-    background:var(--surface-2);border:1px solid var(--hairline);color:var(--ink);
-    font-family:'IBM Plex Mono';font-size:12px;padding:10px 8px;border-radius:6px;width:150px;min-height:42px;
+  .entry-row select.exp-cat {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 13px; padding: 10px 10px; border-radius: var(--radius-sm);
+    width: 150px; min-height: 42px;
   }
-  .entry-row input.exp-desc::placeholder{color:var(--ink-muted);}
-  .entry-row input.exp-desc{
-    flex:1;min-width:120px;background:none;border:none;color:var(--ink);
-    font-family:'Public Sans';font-size:15px;padding:6px 2px;border-bottom:1px solid transparent;min-height:40px;
+  .entry-row input.exp-desc::placeholder { color: var(--text-tertiary); }
+  .entry-row input.exp-desc {
+    flex: 1; min-width: 120px; background: none; border: none; color: var(--text);
+    font-family: var(--font); font-size: 15px; padding: 8px 2px;
+    border-bottom: 1px solid transparent; min-height: 40px;
   }
-  .entry-row input.exp-desc:focus{outline:none;border-bottom:1px solid var(--hairline);}
-  .entry-row input.exp-amount{
-    width:110px;background:var(--surface-2);border:1px solid var(--hairline);color:var(--ink);
-    font-family:'IBM Plex Mono';font-size:15px;text-align:right;padding:10px 10px;border-radius:6px;min-height:42px;
+  .entry-row input.exp-desc:focus { outline: none; border-bottom-color: var(--accent); }
+  .entry-row input.exp-amount {
+    width: 110px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 15px; font-weight: 500;
+    text-align: right; padding: 10px 12px; border-radius: var(--radius-sm); min-height: 42px;
   }
-  .exp-recurring-label{
-    display:flex;align-items:center;gap:6px;cursor:pointer;
-    font-family:'IBM Plex Mono';font-size:11px;color:var(--ink-muted);
-    white-space:nowrap;min-height:42px;padding:0 4px;
+  .entry-row input:focus, .entry-row select:focus {
+    outline: none; border-color: var(--accent);
   }
-  .exp-recurring-label input[type=checkbox]{
-    accent-color:var(--liability);width:18px;height:18px;cursor:pointer;
+  .exp-recurring-label {
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    font-size: 12px; color: var(--text-secondary); white-space: nowrap;
+    min-height: 42px; padding: 0 4px;
   }
-  .log-btn{
-    background:var(--surface-2);border:1px solid var(--hairline);color:var(--ink-muted);
-    font-family:'IBM Plex Mono';font-size:11px;padding:6px 10px;border-radius:6px;
-    cursor:pointer;white-space:nowrap;
+  .exp-recurring-label input[type=checkbox] {
+    accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
   }
-  .log-btn:hover{color:var(--ink);border-color:var(--ink-muted);}
-  .log-btn.done{opacity:0.5;pointer-events:none;}
+  .log-btn {
+    background: var(--bg-input); border: none; color: var(--text-secondary);
+    font-family: var(--font); font-size: 12px; font-weight: 500;
+    padding: 7px 12px; border-radius: 980px; cursor: pointer; white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+  .log-btn:hover { background: var(--accent-soft); color: var(--accent); }
+  .log-btn.done { opacity: 0.45; pointer-events: none; }
 
-  .breakdown-row{margin-bottom:13px;}
-  .breakdown-row:last-child{margin-bottom:0;}
-  .breakdown-row .bd-top{
-    display:flex;justify-content:space-between;font-family:'IBM Plex Mono';
-    font-size:12px;margin-bottom:5px;
+  .breakdown-row { margin-bottom: 14px; }
+  .breakdown-row:last-child { margin-bottom: 0; }
+  .breakdown-row .bd-top {
+    display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;
   }
-  .breakdown-row .bd-top .bd-cat{color:var(--ink);}
-  .breakdown-row .bd-top .bd-amt{color:var(--ink-muted);}
-  .bar-track{height:6px;background:var(--surface-2);border-radius:4px;overflow:hidden;}
-  .bar-fill{height:100%;background:var(--liability);border-radius:4px;}
-  .bar-fill.income{background:var(--income);}
+  .breakdown-row .bd-top .bd-cat { color: var(--text); font-weight: 500; }
+  .breakdown-row .bd-top .bd-amt { color: var(--text-secondary); }
+  .bar-track {
+    height: 5px; background: var(--bg-input); border-radius: 3px; overflow: hidden;
+  }
+  .bar-fill { height: 100%; background: var(--red); border-radius: 3px; }
+  .bar-fill.income { background: var(--green); }
 
-  .dash-grid{
-    display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-bottom:18px;
+  .dash-grid {
+    display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-bottom: 16px;
   }
-  @media (max-width:720px){.dash-grid{grid-template-columns:1fr;}}
-  .mini-list .row{padding:8px 0;}
-  .mini-list .row span.val{font-family:'IBM Plex Mono';font-size:13px;}
-  .section-link{
-    font-family:'IBM Plex Mono';font-size:11px;color:var(--gold);
-    background:none;border:none;cursor:pointer;padding:0;margin-left:auto;
+  @media (max-width: 720px) { .dash-grid { grid-template-columns: 1fr; } }
+  .mini-list .row { padding: 8px 0; }
+  .mini-list .row span.val { font-size: 13px; font-weight: 500; }
+  .section-link {
+    font-size: 13px; font-weight: 500; color: var(--accent);
+    background: none; border: none; cursor: pointer; padding: 0; margin-left: auto;
   }
-  .section-link:hover{text-decoration:underline;}
-  .panel-header{
-    display:flex;justify-content:space-between;align-items:flex-end;
-    margin-bottom:20px;flex-wrap:wrap;gap:8px;
-  }
-  .panel-header h1{
-    font-family:'Fraunces', serif;font-weight:600;font-size:24px;margin:0;
-  }
-  .panel-header .eyebrow{
-    font-family:'IBM Plex Mono', monospace;font-size:11px;letter-spacing:0.14em;
-    text-transform:uppercase;color:var(--ink-muted);display:block;margin-bottom:4px;
-  }
+  .section-link:hover { opacity: 0.8; }
 
   /* Cash Flow sub-tabs */
-  .subtabs{
-    display:flex;gap:2px;background:var(--surface);
-    border:1px solid var(--hairline);border-radius:8px;padding:3px;
-    margin-bottom:18px;width:fit-content;
+  .subtabs {
+    display: flex; gap: 2px; background: var(--bg-input);
+    border-radius: 9px; padding: 3px; margin-bottom: 20px; width: fit-content;
   }
-  .subtab-btn{
-    font-family:'IBM Plex Mono', monospace;font-size:12px;font-weight:500;
-    letter-spacing:0.04em;text-transform:uppercase;
-    background:transparent;border:none;color:var(--ink-muted);
-    padding:8px 16px;border-radius:6px;cursor:pointer;min-height:40px;
+  .subtab-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; border: none; color: var(--text-secondary);
+    padding: 7px 16px; border-radius: 7px; cursor: pointer; min-height: 36px;
   }
-  .subtab-btn.active{background:var(--surface-2);color:var(--ink);}
-  .subpanel{display:none;}
-  .subpanel.active{display:block;}
+  .subtab-btn.active {
+    background: var(--bg-card); color: var(--text); box-shadow: var(--shadow);
+  }
+  .subpanel { display: none; }
+  .subpanel.active { display: block; }
 
-  /* Floating Action Button */
-  .fab{
-    position:fixed;right:20px;bottom:calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
-    z-index:90;
-    width:56px;height:56px;border-radius:50%;
-    background:var(--gold);color:#1B1B16;border:none;
-    font-size:28px;font-weight:500;line-height:1;
-    cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.4);
-    display:flex;align-items:center;justify-content:center;
-    transition:transform .15s, filter .15s;
+  /* FAB */
+  .fab {
+    position: fixed; right: 20px;
+    bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
+    z-index: 90;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--accent); color: #fff; border: none;
+    font-size: 26px; font-weight: 400; line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.15s, opacity 0.15s;
   }
-  .fab:hover{filter:brightness(1.08);transform:scale(1.05);}
-  @media (min-width:641px){
-    .fab{bottom:28px;right:28px;}
+  .fab:hover { opacity: 0.9; transform: scale(1.04); }
+  @media (min-width: 641px) {
+    .fab { bottom: 28px; right: 28px; }
   }
 
   /* Modal */
-  .modal-overlay{
-    position:fixed;inset:0;z-index:200;
-    background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);
-    display:none;align-items:flex-end;justify-content:center;
-    padding:16px;
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: none; align-items: flex-end; justify-content: center;
+    padding: 16px;
   }
-  .modal-overlay.open{display:flex;}
-  @media (min-width:520px){
-    .modal-overlay{align-items:center;}
+  .modal-overlay.open { display: flex; }
+  @media (min-width: 520px) {
+    .modal-overlay { align-items: center; }
   }
-  .modal{
-    background:var(--surface);border:1px solid var(--hairline);
-    border-radius:14px;width:100%;max-width:420px;
-    padding:22px 20px 20px;
-    max-height:90vh;overflow-y:auto;
+  .modal {
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); width: 100%; max-width: 400px;
+    padding: 24px; max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
   }
-  .modal h3{
-    font-family:'Fraunces', serif;font-weight:600;font-size:20px;margin:0 0 16px;
+  .modal h3 {
+    font-weight: 600; font-size: 20px; letter-spacing: -0.02em;
+    margin: 0 0 18px; color: var(--text);
   }
-  .modal-type{
-    display:flex;gap:6px;margin-bottom:16px;
+  .modal-type {
+    display: flex; gap: 6px; margin-bottom: 18px;
   }
-  .modal-type button{
-    flex:1;font-family:'IBM Plex Mono';font-size:12px;padding:10px;
-    border-radius:8px;border:1px solid var(--hairline);background:var(--surface-2);
-    color:var(--ink-muted);cursor:pointer;min-height:42px;
+  .modal-type button {
+    flex: 1; font-family: var(--font); font-size: 13px; font-weight: 500;
+    padding: 10px; border-radius: 980px; border: 1px solid var(--border);
+    background: var(--bg-input); color: var(--text-secondary); cursor: pointer; min-height: 40px;
   }
-  .modal-type button.active{background:var(--gold);color:#1B1B16;border-color:var(--gold);font-weight:600;}
-  .modal-field{margin-bottom:12px;}
-  .modal-field label{
-    display:block;font-family:'IBM Plex Mono';font-size:11px;
-    letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:5px;
+  .modal-type button.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
   }
-  .modal-field input, .modal-field select{
-    width:100%;background:var(--surface-2);border:1px solid var(--hairline);
-    color:var(--ink);font-family:'Public Sans';font-size:15px;
-    padding:11px 12px;border-radius:8px;min-height:44px;
+  .modal-field { margin-bottom: 14px; }
+  .modal-field label {
+    display: block; font-size: 12px; font-weight: 500;
+    color: var(--text-secondary); margin-bottom: 6px;
   }
-  .modal-field input:focus, .modal-field select:focus{outline:none;border-color:var(--gold);}
-  .modal-actions{display:flex;gap:10px;margin-top:18px;}
-  .modal-actions button{flex:1;min-height:46px;}
-  .modal-check{
-    display:flex;align-items:center;gap:8px;
-    font-family:'IBM Plex Mono';font-size:13px;color:var(--ink-muted);
-    margin-top:4px;cursor:pointer;
+  .modal-field input, .modal-field select {
+    width: 100%; background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font); font-size: 15px;
+    padding: 12px 14px; border-radius: var(--radius-sm); min-height: 44px;
   }
-  .modal-check input{width:18px;height:18px;accent-color:var(--gold);}
+  .modal-field input:focus, .modal-field select:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-actions button { flex: 1; min-height: 44px; border-radius: 980px; }
+  .modal-check {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; color: var(--text-secondary); margin-top: 4px; cursor: pointer;
+  }
+  .modal-check input { width: 16px; height: 16px; accent-color: var(--accent); }
 
-  /* Toast / Undo */
-  .toast{
-    position:fixed;bottom:calc(var(--bottom-nav-h) + var(--safe-bottom) + 80px);
-    left:50%;transform:translateX(-50%) translateY(20px);
-    background:var(--surface-2);border:1px solid var(--hairline);
-    color:var(--ink);font-family:'IBM Plex Mono';font-size:13px;
-    padding:12px 18px;border-radius:10px;z-index:150;
-    display:flex;align-items:center;gap:14px;
-    opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;
-    box-shadow:0 8px 24px rgba(0,0,0,0.4);white-space:nowrap;
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 80px);
+    left: 50%; transform: translateX(-50%) translateY(12px);
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    color: var(--text); font-size: 14px; font-weight: 500;
+    padding: 12px 18px; border-radius: 980px; z-index: 150;
+    display: flex; align-items: center; gap: 14px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    white-space: nowrap;
   }
-  @media (min-width:641px){
-    .toast{bottom:100px;}
+  @media (min-width: 641px) { .toast { bottom: 100px; } }
+  .toast.show {
+    opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto;
   }
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
-  .toast button{
-    background:none;border:none;color:var(--gold);font-family:'IBM Plex Mono';
-    font-size:13px;font-weight:600;cursor:pointer;padding:4px 0;
+  .toast button {
+    background: none; border: none; color: var(--accent);
+    font-family: var(--font); font-size: 14px; font-weight: 600;
+    cursor: pointer; padding: 2px 0;
   }
 
-  footer{
-    text-align:center;color:var(--ink-muted);font-family:'IBM Plex Mono';
-    font-size:11px;margin-top:28px;padding:0 20px;
+  footer {
+    text-align: center; color: var(--text-tertiary); font-size: 12px;
+    margin-top: 32px; padding: 0 20px;
   }
-  @media (max-width:640px){footer{margin-bottom:12px;}}
+  @media (max-width: 640px) { footer { margin-bottom: 12px; } }
+  kbd {
+    font-family: var(--mono); background: var(--bg-input);
+    padding: 1px 6px; border-radius: 4px; font-size: 11px;
+  }
+
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg-input); border: none;
+    color: var(--text-secondary); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; transition: background 0.15s, color 0.15s;
+  }
+  .icon-btn:hover { background: var(--border-strong); color: var(--text); }
+  .sync-status {
+    font-size: 11px; color: var(--text-tertiary);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sync-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--text-tertiary);
+  }
+  .sync-dot.on { background: var(--green); }
+  .sync-dot.err { background: var(--red); }
+  .settings-field { margin-bottom: 14px; }
+  .settings-field label {
+    display: block; font-size: 12px; font-weight: 500;
+    color: var(--text-secondary); margin-bottom: 6px;
+  }
+  .settings-field input, .settings-field textarea {
+    width: 100%; background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font); font-size: 14px;
+    padding: 11px 12px; border-radius: var(--radius-sm);
+  }
+  .settings-field input:focus, .settings-field textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .settings-field textarea { min-height: 72px; resize: vertical; font-family: var(--mono); font-size: 12px; }
+  .settings-hint {
+    font-size: 12px; color: var(--text-tertiary); margin-top: 6px; line-height: 1.45;
+  }
+  .settings-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 16px;
+  }
+  .settings-row label { font-size: 14px; font-weight: 500; color: var(--text); }
+  .toggle {
+    width: 44px; height: 26px; border-radius: 13px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    position: relative; cursor: pointer; transition: background 0.2s;
+  }
+  .toggle.on { background: var(--accent); border-color: var(--accent); }
+  .toggle::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle.on::after { transform: translateX(18px); }
+  .sql-box {
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px;
+    font-family: var(--mono); font-size: 11px; color: var(--text-secondary);
+    white-space: pre-wrap; line-height: 1.5; margin-top: 8px;
+    overflow-x: auto;
+  }
+
+
+  .mobile-settings {
+    display: none;
+    position: fixed; top: 12px; right: 16px; z-index: 95;
+  }
+  @media (max-width: 640px) {
+    .mobile-settings { display: block; }
+  }
+
 </style>
 </head>
 <body>
@@ -427,14 +580,23 @@
   <div class="topnav-inner">
     <div class="brand">
       <span class="logo">Ledger</span>
-      <span class="tag">Personal</span>
     </div>
     <div class="tabs" role="tablist">
       <button class="tab-btn active" data-tab="dashboard" role="tab">Dashboard</button>
       <button class="tab-btn" data-tab="accounts" role="tab">Accounts</button>
       <button class="tab-btn" data-tab="cashflow" role="tab">Cash Flow</button>
     </div>
-    <div class="as-of" id="asOf">—</div>
+    <div class="nav-right">
+      <span class="sync-status" id="syncStatus" title="Cloud sync status">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="syncLabel">Local</span>
+      </span>
+      <span class="as-of" id="asOf">—</span>
+      <button class="icon-btn" id="settingsBtn" title="Settings & sync" aria-label="Settings">⚙</button>
+      <button class="theme-toggle" id="themeToggle" title="Toggle theme" aria-label="Toggle dark/light mode">
+        <span id="themeIcon">◐</span>
+      </button>
+    </div>
   </div>
 </nav>
 
@@ -453,7 +615,7 @@
   <div class="panel active" id="panel-dashboard" role="tabpanel">
     <div class="panel-header">
       <div>
-        <span class="eyebrow">At a glance</span>
+        <span class="eyebrow">Overview</span>
         <h1>Dashboard</h1>
       </div>
     </div>
@@ -465,26 +627,26 @@
         <div class="delta" id="netDelta"></div>
       </div>
       <div class="card assets">
-        <div class="label">Total Assets</div>
+        <div class="label">Assets</div>
         <div class="figure" id="assetsFig">$0</div>
       </div>
       <div class="card liabilities">
-        <div class="label">Total Liabilities</div>
+        <div class="label">Liabilities</div>
         <div class="figure" id="liabFig">$0</div>
       </div>
     </div>
 
-    <div class="summary summary-2" style="margin-bottom:22px;">
+    <div class="summary summary-2" style="margin-bottom:20px;">
       <div class="card cashflow">
-        <div class="label">Net Cash Flow (This Month)</div>
+        <div class="label">Net Cash Flow · This Month</div>
         <div class="figure" id="dashCashFlow">$0</div>
       </div>
       <div class="card">
         <div class="label">Income / Expenses</div>
-        <div class="figure" style="font-size:18px;display:flex;gap:12px;align-items:baseline;">
-          <span style="color:var(--asset);" id="dashIncome">$0</span>
-          <span style="color:var(--ink-muted);font-weight:400;">/</span>
-          <span style="color:var(--liability);" id="dashExpense">$0</span>
+        <div class="figure" style="font-size:17px;display:flex;gap:10px;align-items:baseline;font-weight:600;">
+          <span style="color:var(--green);" id="dashIncome">$0</span>
+          <span style="color:var(--text-tertiary);font-weight:400;">/</span>
+          <span style="color:var(--red);" id="dashExpense">$0</span>
         </div>
       </div>
     </div>
@@ -492,14 +654,14 @@
     <div class="chart-card">
       <h2>Net Worth History</h2>
       <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
-      <div class="empty-note" id="chartEmpty" style="display:none;">No snapshots yet — switch to Accounts and click “Save Snapshot”.</div>
+      <div class="empty-note" id="chartEmpty" style="display:none;">No snapshots yet — go to Accounts and save a snapshot.</div>
     </div>
 
     <div class="dash-grid">
       <div class="section">
-        <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;margin-bottom:14px;">
           <h2 style="margin:0;">This Month</h2>
-          <button class="section-link" data-goto="cashflow">View all →</button>
+          <button class="section-link" data-goto="cashflow">View all</button>
         </div>
         <div class="summary summary-4" style="margin-bottom:0;">
           <div class="card income" style="padding:14px 16px;">
@@ -512,7 +674,7 @@
           </div>
           <div class="card" style="padding:14px 16px;">
             <div class="label">Top Exp</div>
-            <div class="figure" id="dashExpTop" style="font-size:15px;">—</div>
+            <div class="figure" id="dashExpTop" style="font-size:14px;font-weight:500;">—</div>
           </div>
           <div class="card" style="padding:14px 16px;">
             <div class="label">Txns</div>
@@ -522,12 +684,12 @@
       </div>
 
       <div class="section">
-        <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;margin-bottom:14px;">
           <h2 style="margin:0;">Recurring</h2>
-          <button class="section-link" data-goto="cashflow">Manage →</button>
+          <button class="section-link" data-goto="cashflow">Manage</button>
         </div>
         <div class="mini-list" id="dashRecurring"></div>
-        <div class="empty-note" id="dashRecurringEmpty" style="display:none;padding:20px 0;">No recurring items yet.</div>
+        <div class="empty-note" id="dashRecurringEmpty" style="display:none;padding:24px 0;">No recurring items yet.</div>
       </div>
     </div>
   </div>
@@ -548,11 +710,11 @@
         <div class="delta" id="accNetDelta"></div>
       </div>
       <div class="card assets">
-        <div class="label">Total Assets</div>
+        <div class="label">Assets</div>
         <div class="figure" id="accAssetsFig">$0</div>
       </div>
       <div class="card liabilities">
-        <div class="label">Total Liabilities</div>
+        <div class="label">Liabilities</div>
         <div class="figure" id="accLiabFig">$0</div>
       </div>
     </div>
@@ -573,17 +735,17 @@
     <div class="actions">
       <div class="left">
         <button class="primary" id="snapshotBtn">Save Snapshot</button>
-        <button class="ghost" id="exportBtn">Export JSON</button>
-        <button class="ghost" id="importBtn">Import JSON</button>
+        <button class="ghost" id="exportBtn">Export</button>
+        <button class="ghost" id="importBtn">Import</button>
         <input type="file" id="importFile" accept="application/json">
       </div>
       <span class="save-msg" id="saveMsg">Saved</span>
     </div>
 
-    <div class="chart-card" style="margin-top:22px;">
+    <div class="chart-card" style="margin-top:20px;">
       <h2>History</h2>
       <div class="chart-wrap"><canvas id="accountsHistoryChart"></canvas></div>
-      <div class="empty-note" id="accChartEmpty" style="display:none;">No snapshots yet — click “Save Snapshot” above.</div>
+      <div class="empty-note" id="accChartEmpty" style="display:none;">No snapshots yet — click Save Snapshot above.</div>
     </div>
   </div>
 
@@ -614,7 +776,7 @@
         </div>
         <div class="card">
           <div class="label">Top Category</div>
-          <div class="figure" id="expTopCat" style="font-size:17px;">—</div>
+          <div class="figure" id="expTopCat" style="font-size:16px;font-weight:500;">—</div>
         </div>
         <div class="card">
           <div class="label">Transactions</div>
@@ -635,13 +797,13 @@
         </div>
       </div>
 
-      <div class="section" style="margin-top:18px;">
+      <div class="section" style="margin-top:16px;">
         <h2>Recurring <span class="tally" id="expRecurringTally"></span></h2>
         <div id="expRecurringList"></div>
         <div class="empty-note" id="expRecurringEmpty" style="display:none;">Check “Recurring” on an entry to track it here.</div>
       </div>
 
-      <div class="section" style="margin-top:18px;">
+      <div class="section" style="margin-top:16px;">
         <h2>Entries <span class="tally" id="expTally"></span></h2>
         <div id="expenseRows"></div>
         <button class="add-row" id="addExpenseBtn">+ Add expense</button>
@@ -661,7 +823,7 @@
         </div>
         <div class="card">
           <div class="label">Top Category</div>
-          <div class="figure" id="incTopCat" style="font-size:17px;">—</div>
+          <div class="figure" id="incTopCat" style="font-size:16px;font-weight:500;">—</div>
         </div>
         <div class="card">
           <div class="label">Transactions</div>
@@ -682,13 +844,13 @@
         </div>
       </div>
 
-      <div class="section" style="margin-top:18px;">
+      <div class="section" style="margin-top:16px;">
         <h2>Recurring <span class="tally" id="incRecurringTally"></span></h2>
         <div id="incRecurringList"></div>
         <div class="empty-note" id="incRecurringEmpty" style="display:none;">Check “Recurring” on an entry to track it here.</div>
       </div>
 
-      <div class="section" style="margin-top:18px;">
+      <div class="section" style="margin-top:16px;">
         <h2>Entries <span class="tally" id="incTally"></span></h2>
         <div id="incomeRows"></div>
         <button class="add-row" id="addIncomeBtn">+ Add income</button>
@@ -698,10 +860,16 @@
 
 </div>
 
-<footer>Data stored locally. Export regularly. Press <kbd style="font-family:IBM Plex Mono;background:var(--surface-2);padding:1px 5px;border-radius:3px;">N</kbd> for quick add.</footer>
+<footer>Local-first · Optional cloud sync · Press <kbd>N</kbd> for quick add</footer>
+
+
+<button class="icon-btn mobile-settings" id="mobileSettingsBtn" title="Settings">⚙</button>
 
 <!-- FAB -->
 <button class="fab" id="fabBtn" title="Quick add (N)">+</button>
+
+<!-- Mobile theme toggle (visible only on small screens via bottom area, but we put a small one) -->
+<!-- Actually theme is in topnav; on mobile we can add it later or rely on system. For now keep in top + we'll add a small control if needed. -->
 
 <!-- Quick Add Modal -->
 <div class="modal-overlay" id="modalOverlay">
@@ -721,7 +889,7 @@
     </div>
     <div class="modal-field">
       <label>Description</label>
-      <input type="text" id="mDesc" placeholder="Optional note" autocomplete="off">
+      <input type="text" id="mDesc" placeholder="Optional" autocomplete="off">
     </div>
     <div class="modal-field">
       <label>Amount</label>
@@ -738,6 +906,53 @@
   </div>
 </div>
 
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal" role="dialog" style="max-width:440px;">
+    <h3>Settings</h3>
+
+    <div class="settings-row">
+      <label>Cloud sync</label>
+      <div class="toggle" id="syncToggle" role="switch" aria-checked="false"></div>
+    </div>
+
+    <div id="syncFields" style="display:none;">
+      <div class="settings-field">
+        <label>Supabase Project URL</label>
+        <input type="url" id="sbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
+      </div>
+      <div class="settings-field">
+        <label>Anon / Public Key</label>
+        <textarea id="sbKey" placeholder="eyJhbGciOi..." spellcheck="false"></textarea>
+      </div>
+      <div class="settings-field">
+        <label>Sync ID (your private key)</label>
+        <input type="text" id="sbSyncId" placeholder="long-random-string-you-choose" autocomplete="off">
+        <div class="settings-hint">Use the same Sync ID on every device. Treat it like a password.</div>
+      </div>
+      <div class="settings-field">
+        <label>One-time table setup (run in Supabase SQL editor)</label>
+        <div class="sql-box">create table if not exists ledger_data (
+  id text primary key,
+  payload jsonb not null,
+  updated_at timestamptz default now()
+);
+alter table ledger_data enable row level security;
+create policy "anon access" on ledger_data
+  for all using (true) with check (true);</div>
+        <div class="settings-hint">After creating the table, sync will work across devices.</div>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:8px;">
+      <button class="ghost" id="settingsCancel">Close</button>
+      <button class="primary" id="settingsSave">Save</button>
+    </div>
+    <div class="settings-hint" id="settingsMsg" style="margin-top:12px;text-align:center;"></div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast">
   <span id="toastMsg">Deleted</span>
@@ -746,6 +961,8 @@
 
 <script>
 const STORAGE_KEY = 'ledger-networth-v1';
+const THEME_KEY = 'ledger-theme';
+const SYNC_CFG_KEY = 'ledger-sync-cfg';
 const ASSET_CATS = ['Cash','Investments','Stocks','Blockchain','Retirement','Real Estate','Vehicles','Other'];
 const LIAB_CATS = ['Credit Card','Loan','Mortgage','Other'];
 const EXPENSE_CATS = ['Housing','Utilities','Groceries','Dining','Transportation','Insurance','Healthcare','Entertainment','Shopping','Subscriptions','Travel','Education','Personal Care','Debt Payment','Savings & Investments','Gifts & Donations','Other'];
@@ -753,11 +970,7 @@ const INCOME_CATS = ['Salary','Freelance','Investments','Side Hustle','Interest'
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
 
-function loadData(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw) return JSON.parse(raw);
-  }catch(e){ console.error('Load failed', e); }
+function defaultData(){
   return {
     accounts:[
       {id:uid(), name:'Checking', category:'Cash', type:'asset', balance:0},
@@ -765,18 +978,162 @@ function loadData(){
     ],
     history:[],
     expenses:[],
-    incomes:[]
+    incomes:[],
+    _updatedAt: new Date().toISOString()
   };
 }
 
-let data = loadData();
+function loadDataLocal(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) {
+      const parsed = JSON.parse(raw);
+      if(!parsed._updatedAt) parsed._updatedAt = new Date().toISOString();
+      return parsed;
+    }
+  }catch(e){ console.error('Load failed', e); }
+  return defaultData();
+}
+
+let data = loadDataLocal();
 if(!data.expenses) data.expenses = [];
 if(!data.incomes) data.incomes = [];
+if(!data._updatedAt) data._updatedAt = new Date().toISOString();
+
+/* ---- Cloud sync (Supabase) ---- */
+let supabaseClient = null;
+let syncCfg = null;
+let syncEnabled = false;
+let pullTimer = null;
+
+function loadSyncCfg(){
+  try{
+    const raw = localStorage.getItem(SYNC_CFG_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return { enabled:false, url:'', key:'', syncId:'' };
+}
+
+function saveSyncCfg(cfg){
+  localStorage.setItem(SYNC_CFG_KEY, JSON.stringify(cfg));
+  syncCfg = cfg;
+}
+
+function initSupabase(){
+  syncCfg = loadSyncCfg();
+  syncEnabled = !!(syncCfg.enabled && syncCfg.url && syncCfg.key && syncCfg.syncId);
+  supabaseClient = null;
+  if(syncEnabled && window.supabase){
+    try{
+      supabaseClient = window.supabase.createClient(syncCfg.url.trim(), syncCfg.key.trim());
+    }catch(e){
+      console.error('Supabase init failed', e);
+      syncEnabled = false;
+    }
+  }
+  updateSyncUI();
+  if(syncEnabled){
+    pullFromCloud(true);
+    startRealtime();
+  }
+}
+
+function updateSyncUI(){
+  const dot = document.getElementById('syncDot');
+  const label = document.getElementById('syncLabel');
+  if(!dot || !label) return;
+  if(syncEnabled && supabaseClient){
+    dot.className = 'sync-dot on';
+    label.textContent = 'Synced';
+  } else {
+    dot.className = 'sync-dot';
+    label.textContent = 'Local';
+  }
+}
+
+async function pushToCloud(){
+  if(!syncEnabled || !supabaseClient) return;
+  try{
+    data._updatedAt = new Date().toISOString();
+    const { error } = await supabaseClient
+      .from('ledger_data')
+      .upsert({ id: syncCfg.syncId, payload: data, updated_at: data._updatedAt });
+    if(error) throw error;
+    updateSyncUI();
+  }catch(e){
+    console.error('Push failed', e);
+    const dot = document.getElementById('syncDot');
+    if(dot) dot.className = 'sync-dot err';
+    const label = document.getElementById('syncLabel');
+    if(label) label.textContent = 'Sync error';
+  }
+}
+
+async function pullFromCloud(isInitial){
+  if(!syncEnabled || !supabaseClient) return;
+  try{
+    const { data: rows, error } = await supabaseClient
+      .from('ledger_data')
+      .select('payload, updated_at')
+      .eq('id', syncCfg.syncId)
+      .limit(1);
+    if(error) throw error;
+    if(rows && rows.length){
+      const remote = rows[0].payload;
+      const remoteAt = rows[0].updated_at || remote._updatedAt || '';
+      const localAt = data._updatedAt || '';
+      if(remoteAt && remoteAt > localAt){
+        data = remote;
+        if(!data.expenses) data.expenses = [];
+        if(!data.incomes) data.incomes = [];
+        data._updatedAt = remoteAt;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        if(typeof renderAll === 'function'){
+          renderAll();
+          renderExpenseAll();
+          renderIncomeAll();
+        }
+      }
+    } else if(isInitial){
+      // nothing in cloud yet — push local
+      await pushToCloud();
+    }
+    updateSyncUI();
+  }catch(e){
+    console.error('Pull failed', e);
+    const dot = document.getElementById('syncDot');
+    if(dot) dot.className = 'sync-dot err';
+  }
+}
+
+function startRealtime(){
+  if(!supabaseClient || !syncCfg) return;
+  try{
+    supabaseClient
+      .channel('ledger-' + syncCfg.syncId)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'ledger_data',
+        filter: 'id=eq.' + syncCfg.syncId
+      }, () => {
+        pullFromCloud(false);
+      })
+      .subscribe();
+  }catch(e){ console.error('Realtime failed', e); }
+}
+
+// Pull when tab becomes visible again
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && syncEnabled) pullFromCloud(false);
+});
 
 function saveData(){
   try{
+    data._updatedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     flashSaved();
+    pushToCloud();
   }catch(e){ console.error('Save failed', e); }
 }
 
@@ -803,7 +1160,31 @@ function totals(){
   return {assets, liabilities, net: assets-liabilities};
 }
 
-/* ---- Soft delete + Undo ---- */
+/* Theme */
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_KEY, theme);
+  const icon = document.getElementById('themeIcon');
+  if(icon) icon.textContent = theme === 'dark' ? '◐' : '◑';
+  // re-render charts so they pick up new colors if needed
+  if(typeof renderChart === 'function') renderChart();
+  if(typeof renderAccountsChart === 'function') renderAccountsChart();
+  if(typeof renderExpenseChart === 'function') renderExpenseChart();
+  if(typeof renderIncomeChart === 'function') renderIncomeChart();
+}
+
+(function initTheme(){
+  const saved = localStorage.getItem(THEME_KEY);
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(saved || (prefersDark ? 'dark' : 'light'));
+})();
+
+document.getElementById('themeToggle').addEventListener('click', ()=>{
+  const current = document.documentElement.getAttribute('data-theme');
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+});
+
+/* Soft delete + Undo */
 let undoStack = null;
 let undoTimer = null;
 
@@ -847,7 +1228,7 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
   renderDashExpenses();
 });
 
-/* ---- Tab switching ---- */
+/* Tab switching */
 function switchTab(tabId){
   document.querySelectorAll('.tab-btn, .bnav-btn').forEach(b=>{
     const active = b.dataset.tab === tabId;
@@ -871,7 +1252,6 @@ document.querySelectorAll('[data-goto]').forEach(btn=>{
   btn.addEventListener('click', ()=> switchTab(btn.dataset.goto));
 });
 
-/* Subtabs for Cash Flow */
 document.querySelectorAll('.subtab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('.subtab-btn').forEach(b=>b.classList.remove('active'));
@@ -883,7 +1263,7 @@ document.querySelectorAll('.subtab-btn').forEach(btn=>{
   });
 });
 
-/* ---- Accounts ---- */
+/* Accounts */
 function renderRows(){
   const aWrap = document.getElementById('assetsRows');
   const lWrap = document.getElementById('liabRows');
@@ -958,7 +1338,7 @@ function renderSummary(){
     el.className = deltaText.cls;
   });
 
-  document.getElementById('asOf').textContent = 'As of ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  document.getElementById('asOf').textContent = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 }
 
 function renderTallies(){
@@ -966,6 +1346,18 @@ function renderTallies(){
   const lCount = data.accounts.filter(a=>a.type==='liability').length;
   document.getElementById('assetsTally').textContent = aCount + (aCount===1?' account':' accounts');
   document.getElementById('liabTally').textContent = lCount + (lCount===1?' account':' accounts');
+}
+
+function getChartColors(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return {
+    grid: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+    tick: isDark ? '#98989d' : '#6e6e73',
+    line: isDark ? '#0a84ff' : '#0071e3',
+    fill: isDark ? 'rgba(10,132,255,0.12)' : 'rgba(0,113,227,0.1)',
+    barExp: isDark ? '#9a8e8c' : '#7a6e6c',
+    barInc: isDark ? '#8a9490' : '#6b7370'
+  };
 }
 
 let chart, accountsChart;
@@ -976,6 +1368,7 @@ function makeHistoryChart(canvas, emptyNoteId){
     return null;
   }
   canvas.style.display='block'; emptyNote.style.display='none';
+  const colors = getChartColors();
   const labels = data.history.map(h=>new Date(h.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
   const netData = data.history.map(h=>h.netWorth);
   return new Chart(canvas.getContext('2d'), {
@@ -984,16 +1377,17 @@ function makeHistoryChart(canvas, emptyNoteId){
       labels,
       datasets:[{
         label:'Net Worth', data:netData,
-        borderColor:'#8FA3C7', backgroundColor:'rgba(143,163,199,0.14)',
-        borderWidth:2, pointRadius:3, pointBackgroundColor:'#8FA3C7', tension:0.25, fill:true
+        borderColor: colors.line, backgroundColor: colors.fill,
+        borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: colors.line,
+        tension: 0.3, fill: true
       }]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>fmt(ctx.parsed.y)}} },
       scales:{
-        x:{ ticks:{ color:'#8B93A1', font:{family:'IBM Plex Mono', size:10} }, grid:{ color:'#2B313B' } },
-        y:{ ticks:{ color:'#8B93A1', font:{family:'IBM Plex Mono', size:10}, callback:(v)=>fmt(v) }, grid:{ color:'#2B313B' } }
+        x:{ ticks:{ color: colors.tick, font:{ family: 'Inter', size: 11 } }, grid:{ color: colors.grid } },
+        y:{ ticks:{ color: colors.tick, font:{ family: 'Inter', size: 11 }, callback:(v)=>fmt(v) }, grid:{ color: colors.grid } }
       }
     }
   });
@@ -1019,7 +1413,7 @@ function renderAll(){
   renderDashExpenses();
 }
 
-/* ---- Shared helpers for cash flow ---- */
+/* Shared helpers */
 function monthKeyOf(dateStr){ return dateStr ? dateStr.slice(0,7) : ''; }
 function currentMonthKey(){ return new Date().toISOString().slice(0,7); }
 
@@ -1079,7 +1473,7 @@ function logRecurringThisMonth(collection, item){
   return true;
 }
 
-/* ---- Expenses ---- */
+/* Expenses */
 function currentMonthExpenses(){
   const mk = currentMonthKey();
   return data.expenses.filter(x=> monthKeyOf(x.date)===mk);
@@ -1200,6 +1594,7 @@ function makeTrendChart(canvas, emptyNoteId, collection, color){
     return null;
   }
   canvas.style.display='block'; emptyNote.style.display='none';
+  const colors = getChartColors();
   const labels = months.map(m=>{
     const [y,mo] = m.split('-');
     return new Date(Number(y), Number(mo)-1, 1).toLocaleDateString('en-US',{month:'short',year:'2-digit'});
@@ -1207,13 +1602,13 @@ function makeTrendChart(canvas, emptyNoteId, collection, color){
   const values = months.map(m=>byMonth[m]);
   return new Chart(canvas.getContext('2d'), {
     type:'bar',
-    data:{ labels, datasets:[{ label:'Total', data:values, backgroundColor:color, borderRadius:4, maxBarThickness:34 }] },
+    data:{ labels, datasets:[{ label:'Total', data:values, backgroundColor: color, borderRadius: 6, maxBarThickness: 32 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>fmt(ctx.parsed.y)}} },
       scales:{
-        x:{ ticks:{ color:'#8B93A1', font:{family:'IBM Plex Mono', size:10} }, grid:{ display:false } },
-        y:{ ticks:{ color:'#8B93A1', font:{family:'IBM Plex Mono', size:10}, callback:(v)=>fmt(v) }, grid:{ color:'#2B313B' } }
+        x:{ ticks:{ color: colors.tick, font:{ family: 'Inter', size: 11 } }, grid:{ display:false } },
+        y:{ ticks:{ color: colors.tick, font:{ family: 'Inter', size: 11 }, callback:(v)=>fmt(v) }, grid:{ color: colors.grid } }
       }
     }
   });
@@ -1222,12 +1617,14 @@ function makeTrendChart(canvas, emptyNoteId, collection, color){
 function renderExpenseChart(){
   const canvas = document.getElementById('expenseTrendChart');
   if(expenseChart) expenseChart.destroy();
-  expenseChart = makeTrendChart(canvas, 'expTrendEmpty', 'expenses', '#A87A9E');
+  const colors = getChartColors();
+  expenseChart = makeTrendChart(canvas, 'expTrendEmpty', 'expenses', colors.barExp);
 }
 function renderIncomeChart(){
   const canvas = document.getElementById('incomeTrendChart');
   if(incomeChart) incomeChart.destroy();
-  incomeChart = makeTrendChart(canvas, 'incTrendEmpty', 'incomes', '#5B9A8B');
+  const colors = getChartColors();
+  incomeChart = makeTrendChart(canvas, 'incTrendEmpty', 'incomes', colors.barInc);
 }
 
 function renderRecurringList(collection){
@@ -1247,11 +1644,11 @@ function renderRecurringList(collection){
     const logged = hasLoggedThisMonth(collection, x);
     return `
       <div class="row">
-        <span style="flex:1;font-family:'Public Sans';font-size:14px;">${escapeHtml(x.desc || x.category || 'Untitled')}
-          <span style="color:var(--ink-muted);font-family:'IBM Plex Mono';font-size:11px;margin-left:6px;">${escapeHtml(x.category)}</span>
+        <span style="flex:1;font-size:14px;">${escapeHtml(x.desc || x.category || 'Untitled')}
+          <span style="color:var(--text-tertiary);font-size:12px;margin-left:6px;">${escapeHtml(x.category)}</span>
         </span>
-        <span style="font-family:'IBM Plex Mono';font-size:14px;color:${isExp?'var(--liability)':'var(--income)'};margin-right:8px;">${fmt(x.amount)}</span>
-        <button class="log-btn ${logged?'done':''}" data-collection="${collection}" data-id="${x.id}" title="Create an entry for this month">
+        <span style="font-size:14px;font-weight:500;color:${isExp?'var(--red)':'var(--green)'};margin-right:8px;">${fmt(x.amount)}</span>
+        <button class="log-btn ${logged?'done':''}" data-collection="${collection}" data-id="${x.id}">
           ${logged ? 'Logged' : 'Log this month'}
         </button>
       </div>
@@ -1281,7 +1678,7 @@ function renderExpenseAll(){
   renderRecurringList('expenses');
 }
 
-/* ---- Income ---- */
+/* Income */
 function currentMonthIncomes(){
   const mk = currentMonthKey();
   return data.incomes.filter(x=> monthKeyOf(x.date)===mk);
@@ -1336,7 +1733,7 @@ function renderIncomeAll(){
   renderRecurringList('incomes');
 }
 
-/* ---- Dashboard cashflow bits ---- */
+/* Dashboard */
 function renderDashExpenses(){
   const monthExp = currentMonthExpenses();
   const monthInc = currentMonthIncomes();
@@ -1349,7 +1746,7 @@ function renderDashExpenses(){
   document.getElementById('dashIncome').textContent = fmt(incTotal);
   document.getElementById('dashExpense').textContent = fmt(expTotal);
   document.getElementById('dashCashFlow').textContent = fmt(net);
-  document.getElementById('dashCashFlow').style.color = net >= 0 ? 'var(--asset)' : 'var(--liability)';
+  document.getElementById('dashCashFlow').style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('dashTxnCount').textContent = monthExp.length + monthInc.length;
 
   const top = categoryTotals(monthExp)[0];
@@ -1370,14 +1767,14 @@ function renderDashExpenses(){
   wrap.innerHTML = allRec.map(x=>`
     <div class="row">
       <span style="flex:1;font-size:13px;">${escapeHtml(x.desc || x.category || 'Untitled')}
-        <span style="color:var(--ink-muted);font-size:10px;margin-left:4px;">${x._type==='exp'?'out':'in'}</span>
+        <span style="color:var(--text-tertiary);font-size:11px;margin-left:4px;">${x._type==='exp'?'out':'in'}</span>
       </span>
-      <span class="val" style="color:${x._type==='exp'?'var(--liability)':'var(--income)'};">${fmt(x.amount)}</span>
+      <span class="val" style="color:${x._type==='exp'?'var(--red)':'var(--green)'};">${fmt(x.amount)}</span>
     </div>
   `).join('');
 }
 
-/* ---- Event listeners for add buttons ---- */
+/* Event listeners */
 document.querySelectorAll('.add-row[data-type]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     const type = btn.dataset.type;
@@ -1448,7 +1845,7 @@ document.getElementById('importFile').addEventListener('change', (e)=>{
   e.target.value = '';
 });
 
-/* ---- Quick Add Modal ---- */
+/* Quick Add Modal */
 const modalOverlay = document.getElementById('modalOverlay');
 let modalType = 'expense';
 
@@ -1511,7 +1908,6 @@ document.getElementById('mSubmit').addEventListener('click', ()=>{
   closeModal();
 });
 
-// Keyboard
 document.addEventListener('keydown', (e)=>{
   const tag = (e.target.tagName||'').toLowerCase();
   if(tag === 'input' || tag === 'select' || tag === 'textarea') {
@@ -1529,10 +1925,70 @@ document.getElementById('mAmount').addEventListener('keydown', (e)=>{
   if(e.key === 'Enter') document.getElementById('mSubmit').click();
 });
 
+
+/* ---- Settings / Sync UI ---- */
+const settingsOverlay = document.getElementById('settingsOverlay');
+const syncToggle = document.getElementById('syncToggle');
+const syncFields = document.getElementById('syncFields');
+
+function openSettings(){
+  const cfg = loadSyncCfg();
+  syncToggle.classList.toggle('on', !!cfg.enabled);
+  syncToggle.setAttribute('aria-checked', cfg.enabled ? 'true' : 'false');
+  syncFields.style.display = cfg.enabled ? 'block' : 'none';
+  document.getElementById('sbUrl').value = cfg.url || '';
+  document.getElementById('sbKey').value = cfg.key || '';
+  document.getElementById('sbSyncId').value = cfg.syncId || '';
+  document.getElementById('settingsMsg').textContent = '';
+  settingsOverlay.classList.add('open');
+}
+
+function closeSettings(){
+  settingsOverlay.classList.remove('open');
+}
+
+document.getElementById('settingsBtn').addEventListener('click', openSettings);
+document.getElementById('mobileSettingsBtn').addEventListener('click', openSettings);
+document.getElementById('settingsCancel').addEventListener('click', closeSettings);
+settingsOverlay.addEventListener('click', (e)=>{ if(e.target === settingsOverlay) closeSettings(); });
+
+syncToggle.addEventListener('click', ()=>{
+  const on = !syncToggle.classList.contains('on');
+  syncToggle.classList.toggle('on', on);
+  syncToggle.setAttribute('aria-checked', on ? 'true' : 'false');
+  syncFields.style.display = on ? 'block' : 'none';
+});
+
+document.getElementById('settingsSave').addEventListener('click', async ()=>{
+  const cfg = {
+    enabled: syncToggle.classList.contains('on'),
+    url: document.getElementById('sbUrl').value.trim(),
+    key: document.getElementById('sbKey').value.trim(),
+    syncId: document.getElementById('sbSyncId').value.trim()
+  };
+  if(cfg.enabled && (!cfg.url || !cfg.key || !cfg.syncId)){
+    document.getElementById('settingsMsg').textContent = 'Fill in URL, key, and Sync ID to enable.';
+    document.getElementById('settingsMsg').style.color = 'var(--red)';
+    return;
+  }
+  // Generate a sync id if empty but enabling
+  if(cfg.enabled && !cfg.syncId){
+    cfg.syncId = 'ledger-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    document.getElementById('sbSyncId').value = cfg.syncId;
+  }
+  saveSyncCfg(cfg);
+  initSupabase();
+  document.getElementById('settingsMsg').textContent = cfg.enabled ? 'Sync enabled. Data will stay in sync across devices.' : 'Sync disabled. Local only.';
+  document.getElementById('settingsMsg').style.color = 'var(--green)';
+  setTimeout(closeSettings, 900);
+});
+
+
 /* Initial render */
 renderAll();
 renderExpenseAll();
 renderIncomeAll();
+initSupabase();
 </script>
 </body>
 </html>
