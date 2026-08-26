@@ -1097,13 +1097,16 @@
 );
 alter table ledger_data enable row level security;
 create policy "anon access" on ledger_data
-  for all using (true) with check (true);</div>
+  for all using (true) with check (true);
+-- Enable realtime (required for live updates):
+alter publication supabase_realtime add table ledger_data;</div>
         <div class="settings-hint">After creating the table, sync will work across devices.</div>
       </div>
     </div>
 
     <div class="modal-actions" style="margin-top:8px;">
       <button class="ghost" id="settingsCancel">Close</button>
+      <button class="ghost" id="settingsSyncNow" type="button">Sync now</button>
       <button class="primary" id="settingsSave">Save</button>
     </div>
     <div class="settings-hint" id="settingsMsg" style="margin-top:12px;text-align:center;"></div>
@@ -1240,7 +1243,6 @@ async function pushToCloud(){
   if(!syncEnabled || !supabaseClient || !syncCfg) return false;
   try{
     data._updatedAt = new Date().toISOString();
-    // Also keep local in sync with timestamp
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
     const { error } = await supabaseClient
@@ -1256,7 +1258,6 @@ async function pushToCloud(){
   }catch(e){
     console.error('Push failed', e);
     lastSyncError = (e && e.message) ? e.message : String(e);
-    // Common hints
     if(lastSyncError.includes('relation') || lastSyncError.includes('does not exist')){
       lastSyncError = 'Table missing — run the SQL setup in Supabase';
     } else if(lastSyncError.includes('JWT') || lastSyncError.includes('Invalid API')){
@@ -1269,7 +1270,7 @@ async function pushToCloud(){
   }
 }
 
-async function pullFromCloud(isInitial){
+async function pullFromCloud(isInitial, force){
   if(!syncEnabled || !supabaseClient || !syncCfg) return false;
   try{
     const { data: rows, error } = await supabaseClient
@@ -1283,10 +1284,12 @@ async function pullFromCloud(isInitial){
       const remote = rows[0].payload;
       const remoteAt = rows[0].updated_at || (remote && remote._updatedAt) || '';
       const localAt = data._updatedAt || '';
-      if(remoteAt && remoteAt > localAt){
+      // Apply remote if newer, or if forced and timestamps differ
+      if(remoteAt && (remoteAt > localAt || (force && remoteAt !== localAt))){
         data = remote;
         if(!data.expenses) data.expenses = [];
         if(!data.incomes) data.incomes = [];
+        if(!data.accounts) data.accounts = [];
         data._updatedAt = remoteAt;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         if(typeof renderAll === 'function'){
@@ -1294,9 +1297,11 @@ async function pullFromCloud(isInitial){
           renderExpenseAll();
           renderIncomeAll();
         }
+        lastSyncError = '';
+        updateSyncUI('Synced');
+        return true;
       }
     } else if(isInitial){
-      // nothing in cloud yet — push local as first version
       await pushToCloud();
     }
     lastSyncError = '';
@@ -1317,6 +1322,15 @@ async function pullFromCloud(isInitial){
   }
 }
 
+async function syncNow(){
+  if(!syncEnabled || !supabaseClient) return;
+  updateSyncUI('Syncing…');
+  // Pull first (take newer remote), then push local if still newer
+  await pullFromCloud(false, true);
+  await pushToCloud();
+  updateSyncUI('Synced');
+}
+
 function startRealtime(){
   if(!supabaseClient || !syncCfg) return;
   try{
@@ -1328,16 +1342,32 @@ function startRealtime(){
         table: 'ledger_data',
         filter: 'id=eq.' + syncCfg.syncId
       }, () => {
-        pullFromCloud(false);
+        pullFromCloud(false, true);
       })
       .subscribe();
   }catch(e){ console.error('Realtime failed', e); }
 }
 
-// Pull when tab becomes visible again
+// Pull when tab becomes visible
+const syncStatusEl = document.getElementById('syncStatus');
+if(syncStatusEl){
+  syncStatusEl.style.cursor = 'pointer';
+  syncStatusEl.title = 'Tap to sync now';
+  syncStatusEl.addEventListener('click', ()=>{ if(syncEnabled) syncNow(); });
+}
+
 document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState === 'visible' && syncEnabled) pullFromCloud(false);
+  if(document.visibilityState === 'visible' && syncEnabled) pullFromCloud(false, true);
 });
+
+// Fallback poll every 20s while page is open (covers missing realtime publication)
+if(typeof window !== 'undefined'){
+  setInterval(()=>{
+    if(syncEnabled && document.visibilityState === 'visible'){
+      pullFromCloud(false, false);
+    }
+  }, 20000);
+}
 
 function saveData(){
   try{
@@ -2338,6 +2368,27 @@ function closeSettings(){
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
 document.getElementById('mobileSettingsBtn').addEventListener('click', openSettings);
 document.getElementById('settingsCancel').addEventListener('click', closeSettings);
+
+document.getElementById('settingsSyncNow').addEventListener('click', async ()=>{
+  const msg = document.getElementById('settingsMsg');
+  if(!syncEnabled){
+    msg.textContent = 'Turn on Cloud sync and Save first.';
+    msg.style.color = 'var(--red)';
+    return;
+  }
+  msg.textContent = 'Syncing…';
+  msg.style.color = 'var(--text-secondary)';
+  await syncNow();
+  if(lastSyncError){
+    msg.textContent = lastSyncError;
+    msg.style.color = 'var(--red)';
+  } else {
+    msg.textContent = 'Synced with cloud.';
+    msg.style.color = 'var(--green)';
+  }
+});
+
+
 settingsOverlay.addEventListener('click', (e)=>{ if(e.target === settingsOverlay) closeSettings(); });
 
 syncToggle.addEventListener('click', ()=>{
