@@ -1021,58 +1021,91 @@ function saveSyncCfg(cfg){
   syncCfg = cfg;
 }
 
+let lastSyncError = '';
+
 function initSupabase(){
   syncCfg = loadSyncCfg();
   syncEnabled = !!(syncCfg.enabled && syncCfg.url && syncCfg.key && syncCfg.syncId);
   supabaseClient = null;
-  if(syncEnabled && window.supabase){
+  lastSyncError = '';
+
+  if(syncEnabled){
+    if(!window.supabase){
+      lastSyncError = 'Supabase library failed to load (check internet)';
+      syncEnabled = false;
+      updateSyncUI();
+      return;
+    }
     try{
       supabaseClient = window.supabase.createClient(syncCfg.url.trim(), syncCfg.key.trim());
     }catch(e){
       console.error('Supabase init failed', e);
+      lastSyncError = 'Init failed: ' + (e.message || e);
       syncEnabled = false;
+      updateSyncUI();
+      return;
     }
   }
   updateSyncUI();
   if(syncEnabled){
-    pullFromCloud(true);
-    startRealtime();
+    pullFromCloud(true).then(() => startRealtime());
   }
 }
 
-function updateSyncUI(){
+function updateSyncUI(statusText){
   const dot = document.getElementById('syncDot');
   const label = document.getElementById('syncLabel');
   if(!dot || !label) return;
-  if(syncEnabled && supabaseClient){
+  if(lastSyncError){
+    dot.className = 'sync-dot err';
+    label.textContent = statusText || 'Sync error';
+    label.title = lastSyncError;
+  } else if(syncEnabled && supabaseClient){
     dot.className = 'sync-dot on';
-    label.textContent = 'Synced';
+    label.textContent = statusText || 'Synced';
+    label.title = 'Cloud sync active';
   } else {
     dot.className = 'sync-dot';
     label.textContent = 'Local';
+    label.title = 'Cloud sync off';
   }
 }
 
 async function pushToCloud(){
-  if(!syncEnabled || !supabaseClient) return;
+  if(!syncEnabled || !supabaseClient || !syncCfg) return false;
   try{
     data._updatedAt = new Date().toISOString();
+    // Also keep local in sync with timestamp
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
     const { error } = await supabaseClient
       .from('ledger_data')
-      .upsert({ id: syncCfg.syncId, payload: data, updated_at: data._updatedAt });
+      .upsert(
+        { id: syncCfg.syncId, payload: data, updated_at: data._updatedAt },
+        { onConflict: 'id' }
+      );
     if(error) throw error;
-    updateSyncUI();
+    lastSyncError = '';
+    updateSyncUI('Synced');
+    return true;
   }catch(e){
     console.error('Push failed', e);
-    const dot = document.getElementById('syncDot');
-    if(dot) dot.className = 'sync-dot err';
-    const label = document.getElementById('syncLabel');
-    if(label) label.textContent = 'Sync error';
+    lastSyncError = (e && e.message) ? e.message : String(e);
+    // Common hints
+    if(lastSyncError.includes('relation') || lastSyncError.includes('does not exist')){
+      lastSyncError = 'Table missing — run the SQL setup in Supabase';
+    } else if(lastSyncError.includes('JWT') || lastSyncError.includes('Invalid API')){
+      lastSyncError = 'Invalid API key or URL';
+    } else if(lastSyncError.includes('Failed to fetch') || lastSyncError.includes('NetworkError')){
+      lastSyncError = 'Network error — check URL and internet';
+    }
+    updateSyncUI('Sync error');
+    return false;
   }
 }
 
 async function pullFromCloud(isInitial){
-  if(!syncEnabled || !supabaseClient) return;
+  if(!syncEnabled || !supabaseClient || !syncCfg) return false;
   try{
     const { data: rows, error } = await supabaseClient
       .from('ledger_data')
@@ -1080,9 +1113,10 @@ async function pullFromCloud(isInitial){
       .eq('id', syncCfg.syncId)
       .limit(1);
     if(error) throw error;
+
     if(rows && rows.length){
       const remote = rows[0].payload;
-      const remoteAt = rows[0].updated_at || remote._updatedAt || '';
+      const remoteAt = rows[0].updated_at || (remote && remote._updatedAt) || '';
       const localAt = data._updatedAt || '';
       if(remoteAt && remoteAt > localAt){
         data = remote;
@@ -1097,14 +1131,24 @@ async function pullFromCloud(isInitial){
         }
       }
     } else if(isInitial){
-      // nothing in cloud yet — push local
+      // nothing in cloud yet — push local as first version
       await pushToCloud();
     }
-    updateSyncUI();
+    lastSyncError = '';
+    updateSyncUI('Synced');
+    return true;
   }catch(e){
     console.error('Pull failed', e);
-    const dot = document.getElementById('syncDot');
-    if(dot) dot.className = 'sync-dot err';
+    lastSyncError = (e && e.message) ? e.message : String(e);
+    if(lastSyncError.includes('relation') || lastSyncError.includes('does not exist')){
+      lastSyncError = 'Table missing — run the SQL setup in Supabase';
+    } else if(lastSyncError.includes('JWT') || lastSyncError.includes('Invalid API')){
+      lastSyncError = 'Invalid API key or URL';
+    } else if(lastSyncError.includes('Failed to fetch') || lastSyncError.includes('NetworkError')){
+      lastSyncError = 'Network error — check URL and internet';
+    }
+    updateSyncUI('Sync error');
+    return false;
   }
 }
 
@@ -1964,6 +2008,7 @@ syncToggle.addEventListener('click', ()=>{
 });
 
 document.getElementById('settingsSave').addEventListener('click', async ()=>{
+  const msg = document.getElementById('settingsMsg');
   const cfg = {
     enabled: syncToggle.classList.contains('on'),
     url: document.getElementById('sbUrl').value.trim(),
@@ -1971,20 +2016,36 @@ document.getElementById('settingsSave').addEventListener('click', async ()=>{
     syncId: document.getElementById('sbSyncId').value.trim()
   };
   if(cfg.enabled && (!cfg.url || !cfg.key || !cfg.syncId)){
-    document.getElementById('settingsMsg').textContent = 'Fill in URL, key, and Sync ID to enable.';
-    document.getElementById('settingsMsg').style.color = 'var(--red)';
+    msg.textContent = 'Fill in URL, key, and Sync ID to enable.';
+    msg.style.color = 'var(--red)';
     return;
   }
-  // Generate a sync id if empty but enabling
   if(cfg.enabled && !cfg.syncId){
     cfg.syncId = 'ledger-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     document.getElementById('sbSyncId').value = cfg.syncId;
   }
   saveSyncCfg(cfg);
+  msg.textContent = 'Connecting…';
+  msg.style.color = 'var(--text-secondary)';
   initSupabase();
-  document.getElementById('settingsMsg').textContent = cfg.enabled ? 'Sync enabled. Data will stay in sync across devices.' : 'Sync disabled. Local only.';
-  document.getElementById('settingsMsg').style.color = 'var(--green)';
-  setTimeout(closeSettings, 900);
+
+  if(!cfg.enabled){
+    msg.textContent = 'Sync disabled. Local only.';
+    msg.style.color = 'var(--green)';
+    setTimeout(closeSettings, 800);
+    return;
+  }
+
+  // Force a test push so we know it works
+  const ok = await pushToCloud();
+  if(ok){
+    msg.textContent = 'Connected. Data is syncing.';
+    msg.style.color = 'var(--green)';
+    setTimeout(closeSettings, 1000);
+  } else {
+    msg.textContent = lastSyncError || 'Could not connect. Check URL, key, and that you ran the SQL setup.';
+    msg.style.color = 'var(--red)';
+  }
 });
 
 
