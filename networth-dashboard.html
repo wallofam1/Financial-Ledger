@@ -1290,13 +1290,21 @@ async function pullFromCloud(isInitial, force){
         if(!data.expenses) data.expenses = [];
         if(!data.incomes) data.incomes = [];
         if(!data.accounts) data.accounts = [];
+        if(!data.history) data.history = [];
+        // normalize cash-flow entries for older payloads
+        data.expenses.forEach(x=>{
+          if(!x.frequency) x.frequency = x.recurring ? 'monthly' : 'one-time';
+        });
+        data.incomes.forEach(x=>{
+          if(!x.frequency) x.frequency = x.recurring ? 'monthly' : 'one-time';
+        });
         data._updatedAt = remoteAt;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        if(typeof renderAll === 'function'){
-          renderAll();
-          renderExpenseAll();
-          renderIncomeAll();
-        }
+        // Render cash flow first (independent), then accounts — don't let one chart error block the rest
+        try { if(typeof renderExpenseAll === 'function') renderExpenseAll(); } catch(err){ console.error('Expense render failed', err); }
+        try { if(typeof renderIncomeAll === 'function') renderIncomeAll(); } catch(err){ console.error('Income render failed', err); }
+        try { if(typeof renderAll === 'function') renderAll(); } catch(err){ console.error('Accounts render failed', err); }
+        try { if(typeof renderDashExpenses === 'function') renderDashExpenses(); } catch(err){ console.error('Dash cashflow render failed', err); }
         lastSyncError = '';
         updateSyncUI('Synced');
         return true;
@@ -1325,10 +1333,14 @@ async function pullFromCloud(isInitial, force){
 async function syncNow(){
   if(!syncEnabled || !supabaseClient) return;
   updateSyncUI('Syncing…');
-  // Pull first (take newer remote), then push local if still newer
+  // Pull remote first (force), re-render, then push current local state
   await pullFromCloud(false, true);
   await pushToCloud();
-  updateSyncUI('Synced');
+  try { if(typeof renderExpenseAll === 'function') renderExpenseAll(); } catch(e){}
+  try { if(typeof renderIncomeAll === 'function') renderIncomeAll(); } catch(e){}
+  try { if(typeof renderAll === 'function') renderAll(); } catch(e){}
+  try { if(typeof renderDashExpenses === 'function') renderDashExpenses(); } catch(e){}
+  updateSyncUI(lastSyncError ? 'Sync error' : 'Synced');
 }
 
 function startRealtime(){
@@ -1490,8 +1502,11 @@ function switchTab(tabId){
   if(tabId === 'dashboard'){ renderChart(); renderDashExpenses(); }
   if(tabId === 'accounts') renderAccountsChart();
   if(tabId === 'cashflow'){
-    renderExpenseChart();
-    renderIncomeChart();
+    if(typeof renderExpenseAll === 'function') renderExpenseAll();
+    if(typeof renderIncomeAll === 'function') renderIncomeAll();
+    if(typeof renderExpenseChart === 'function') renderExpenseChart();
+    if(typeof renderIncomeChart === 'function') renderIncomeChart();
+    if(syncEnabled) pullFromCloud(false, true);
   }
 }
 
@@ -1892,6 +1907,8 @@ function currentMonthExpenses(){
 
 function renderExpenseRows(){
   const wrap = document.getElementById('expenseRows');
+  if(!wrap) return;
+  if(!data.expenses) data.expenses = [];
   wrap.innerHTML='';
   const sorted = [...data.expenses].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   sorted.forEach(exp=>{
@@ -2098,6 +2115,8 @@ function currentMonthIncomes(){
 
 function renderIncomeRows(){
   const wrap = document.getElementById('incomeRows');
+  if(!wrap) return;
+  if(!data.incomes) data.incomes = [];
   wrap.innerHTML='';
   const sorted = [...data.incomes].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   sorted.forEach(inc=>{
