@@ -571,6 +571,74 @@
     .mobile-settings { display: block; }
   }
 
+
+  .account-block { border-bottom: 1px solid var(--border); }
+  .account-block:last-child { border-bottom: none; }
+  .account-block .row { border-bottom: none; }
+  .expand-btn {
+    background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; font-size: 12px; padding: 6px 8px;
+    min-width: 28px; min-height: 28px; border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .expand-btn:hover { color: var(--text); background: var(--bg-input); }
+  .expand-btn.open { color: var(--accent); }
+  .holdings-panel {
+    display: none;
+    padding: 4px 0 12px 28px;
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    margin: 0 0 8px 0;
+  }
+  .holdings-panel.open { display: block; }
+  .holding-row {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 6px 8px; border-bottom: 1px solid var(--border);
+  }
+  .holding-row:last-of-type { border-bottom: none; }
+  .holding-row input {
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font); font-size: 13px;
+    padding: 7px 8px; border-radius: 6px; min-height: 34px;
+  }
+  .holding-row input:focus { outline: none; border-color: var(--accent); }
+  .holding-row input.h-name { flex: 1; min-width: 90px; }
+  .holding-row input.h-ticker { width: 72px; text-transform: uppercase; }
+  .holding-row input.h-units { width: 72px; text-align: right; }
+  .holding-row input.h-value { width: 90px; text-align: right; font-weight: 500; }
+  .holding-row .del {
+    background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; font-size: 14px; padding: 4px 6px;
+  }
+  .holding-row .del:hover { color: var(--red); }
+  .add-holding {
+    margin: 8px; background: none; border: 1px dashed var(--border-strong);
+    color: var(--text-secondary); font-family: var(--font); font-size: 12px;
+    padding: 8px; border-radius: 6px; cursor: pointer; width: calc(100% - 16px);
+  }
+  .add-holding:hover { color: var(--accent); border-color: var(--accent); }
+  .holdings-sum {
+    font-size: 11px; color: var(--text-tertiary); padding: 4px 8px 0;
+    font-family: var(--font);
+  }
+  .holdings-sum.mismatch { color: var(--red); }
+  .liab-extras {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .liab-extras input {
+    width: 88px; background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font); font-size: 13px;
+    text-align: right; padding: 7px 8px; border-radius: 6px; min-height: 36px;
+  }
+  .liab-extras input:focus { outline: none; border-color: var(--accent); }
+  .liab-extras .rate-suffix {
+    font-size: 11px; color: var(--text-tertiary); margin-left: -4px;
+  }
+  @media (max-width: 640px) {
+    .liab-extras { width: 100%; margin-top: 4px; padding-left: 0; }
+    .holdings-panel { padding-left: 8px; }
+  }
+
 </style>
 </head>
 <body>
@@ -973,8 +1041,8 @@ function uid(){ return Math.random().toString(36).slice(2,9); }
 function defaultData(){
   return {
     accounts:[
-      {id:uid(), name:'Checking', category:'Cash', type:'asset', balance:0},
-      {id:uid(), name:'Credit Card', category:'Credit Card', type:'liability', balance:0}
+      {id:uid(), name:'Checking', category:'Cash', type:'asset', balance:0, holdings:[]},
+      {id:uid(), name:'Credit Card', category:'Credit Card', type:'liability', balance:0, originalAmount:null, interestRate:null}
     ],
     history:[],
     expenses:[],
@@ -1197,10 +1265,17 @@ function fmt(n){
   return sign + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
 }
 
+function accountBalance(acc){
+  if(acc.type === 'asset' && acc.holdings && acc.holdings.length){
+    return acc.holdings.reduce((s,h)=> s + (Number(h.value)||0), 0);
+  }
+  return Number(acc.balance)||0;
+}
+
 function totals(){
   let assets=0, liabilities=0;
   data.accounts.forEach(a=>{
-    const v = Number(a.balance)||0;
+    const v = accountBalance(a);
     if(a.type==='asset') assets += v; else liabilities += v;
   });
   return {assets, liabilities, net: assets-liabilities};
@@ -1312,47 +1387,186 @@ document.querySelectorAll('.subtab-btn').forEach(btn=>{
 });
 
 /* Accounts */
+const expandedAccounts = new Set();
+
 function renderRows(){
   const aWrap = document.getElementById('assetsRows');
   const lWrap = document.getElementById('liabRows');
   aWrap.innerHTML=''; lWrap.innerHTML='';
   data.accounts.forEach(acc=>{
-    const row = document.createElement('div');
-    row.className='row';
-    const cats = acc.type==='asset' ? ASSET_CATS : LIAB_CATS;
-    row.innerHTML = `
-      <input class="name" value="${escapeHtml(acc.name)}" data-id="${acc.id}" data-field="name">
-      <select class="cat" data-id="${acc.id}" data-field="category">
-        ${cats.map(c=>`<option value="${c}" ${c===acc.category?'selected':''}>${c}</option>`).join('')}
-      </select>
-      <input class="balance" type="number" value="${acc.balance}" data-id="${acc.id}" data-field="balance">
-      <button class="del" data-id="${acc.id}" title="Remove">✕</button>
-    `;
-    (acc.type==='asset' ? aWrap : lWrap).appendChild(row);
+    if(acc.type === 'asset'){
+      if(!acc.holdings) acc.holdings = [];
+      const bal = accountBalance(acc);
+      // keep balance field in sync with holdings sum when holdings exist
+      if(acc.holdings.length) acc.balance = bal;
+      const isOpen = expandedAccounts.has(acc.id);
+      const block = document.createElement('div');
+      block.className = 'account-block';
+      block.innerHTML = `
+        <div class="row">
+          <button class="expand-btn ${isOpen?'open':''}" data-id="${acc.id}" title="Holdings">${isOpen?'▼':'▶'}</button>
+          <input class="name" value="${escapeHtml(acc.name)}" data-id="${acc.id}" data-field="name">
+          <select class="cat" data-id="${acc.id}" data-field="category">
+            ${ASSET_CATS.map(c=>`<option value="${c}" ${c===acc.category?'selected':''}>${c}</option>`).join('')}
+          </select>
+          <input class="balance" type="number" value="${bal}" data-id="${acc.id}" data-field="balance" ${acc.holdings.length?'readonly title="Sum of holdings"':''}>
+          <button class="del" data-id="${acc.id}" title="Remove">✕</button>
+        </div>
+        <div class="holdings-panel ${isOpen?'open':''}" id="holdings-${acc.id}">
+          ${acc.holdings.map(h=> holdingRowHtml(acc.id, h)).join('')}
+          <div class="holdings-sum" id="hsum-${acc.id}"></div>
+          <button class="add-holding" data-acc="${acc.id}">+ Add holding</button>
+        </div>
+      `;
+      aWrap.appendChild(block);
+      updateHoldingsSum(acc);
+    } else {
+      // Liability
+      const block = document.createElement('div');
+      block.className = 'account-block';
+      block.innerHTML = `
+        <div class="row" style="flex-wrap:wrap;">
+          <input class="name" value="${escapeHtml(acc.name)}" data-id="${acc.id}" data-field="name">
+          <select class="cat" data-id="${acc.id}" data-field="category">
+            ${LIAB_CATS.map(c=>`<option value="${c}" ${c===acc.category?'selected':''}>${c}</option>`).join('')}
+          </select>
+          <input class="balance" type="number" value="${acc.balance}" data-id="${acc.id}" data-field="balance" title="Current balance">
+          <div class="liab-extras">
+            <input type="number" value="${acc.originalAmount ?? ''}" data-id="${acc.id}" data-field="originalAmount" placeholder="Original" title="Original loan amount">
+            <input type="number" value="${acc.interestRate ?? ''}" data-id="${acc.id}" data-field="interestRate" placeholder="Rate" step="0.01" title="Interest rate %">
+            <span class="rate-suffix">%</span>
+          </div>
+          <button class="del" data-id="${acc.id}" title="Remove">✕</button>
+        </div>
+      `;
+      lWrap.appendChild(block);
+    }
   });
 
-  document.querySelectorAll('#assetsRows .name, #assetsRows .balance, #liabRows .name, #liabRows .balance').forEach(el=>{
+  // Asset field listeners
+  document.querySelectorAll('#assetsRows .name, #assetsRows .balance').forEach(el=>{
     el.addEventListener('input', onFieldChange);
   });
-  document.querySelectorAll('#assetsRows .cat, #liabRows .cat').forEach(el=>{
+  document.querySelectorAll('#assetsRows .cat').forEach(el=>{
     el.addEventListener('change', onFieldChange);
   });
-  document.querySelectorAll('#assetsRows .del, #liabRows .del').forEach(el=>{
+  document.querySelectorAll('#assetsRows .expand-btn').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.dataset.id;
+      if(expandedAccounts.has(id)) expandedAccounts.delete(id);
+      else expandedAccounts.add(id);
+      renderRows();
+      renderSummary();
+      renderTallies();
+    });
+  });
+  document.querySelectorAll('#assetsRows .add-holding').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const acc = data.accounts.find(a=>a.id===el.dataset.acc);
+      if(!acc) return;
+      if(!acc.holdings) acc.holdings = [];
+      acc.holdings.push({id:uid(), name:'', ticker:'', units:0, value:0});
+      expandedAccounts.add(acc.id);
+      saveData();
+      renderRows();
+      renderSummary();
+    });
+  });
+  document.querySelectorAll('#assetsRows .holding-row input').forEach(el=>{
+    el.addEventListener('input', onHoldingChange);
+  });
+  document.querySelectorAll('#assetsRows .holding-row .del').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const acc = data.accounts.find(a=>a.id===el.dataset.acc);
+      if(!acc || !acc.holdings) return;
+      acc.holdings = acc.holdings.filter(h=>h.id!==el.dataset.hid);
+      if(acc.holdings.length) acc.balance = accountBalance(acc);
+      saveData();
+      renderRows();
+      renderSummary();
+      renderTallies();
+    });
+  });
+  document.querySelectorAll('#assetsRows > .account-block > .row .del').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      softDelete('accounts', el.dataset.id, 'Account deleted');
+    });
+  });
+
+  // Liability field listeners
+  document.querySelectorAll('#liabRows .name, #liabRows .balance, #liabRows .liab-extras input').forEach(el=>{
+    el.addEventListener('input', onFieldChange);
+  });
+  document.querySelectorAll('#liabRows .cat').forEach(el=>{
+    el.addEventListener('change', onFieldChange);
+  });
+  document.querySelectorAll('#liabRows .del').forEach(el=>{
     el.addEventListener('click', ()=>{
       softDelete('accounts', el.dataset.id, 'Account deleted');
     });
   });
 }
 
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function holdingRowHtml(accId, h){
+  return `
+    <div class="holding-row">
+      <input class="h-name" value="${escapeHtml(h.name||'')}" placeholder="Name" data-acc="${accId}" data-hid="${h.id}" data-hfield="name">
+      <input class="h-ticker" value="${escapeHtml(h.ticker||'')}" placeholder="Ticker" data-acc="${accId}" data-hid="${h.id}" data-hfield="ticker">
+      <input class="h-units" type="number" value="${h.units||0}" placeholder="Units" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="units">
+      <input class="h-value" type="number" value="${h.value||0}" placeholder="Value" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="value">
+      <button class="del" data-acc="${accId}" data-hid="${h.id}" title="Remove">✕</button>
+    </div>
+  `;
+}
+
+function updateHoldingsSum(acc){
+  const el = document.getElementById('hsum-' + acc.id);
+  if(!el) return;
+  if(!acc.holdings || !acc.holdings.length){
+    el.textContent = '';
+    return;
+  }
+  const sum = acc.holdings.reduce((s,h)=> s + (Number(h.value)||0), 0);
+  el.textContent = acc.holdings.length + ' holding' + (acc.holdings.length===1?'':'s') + ' · ' + fmt(sum);
+  el.className = 'holdings-sum';
+}
+
+function onHoldingChange(e){
+  const {acc: accId, hid, hfield} = e.target.dataset;
+  const acc = data.accounts.find(a=>a.id===accId);
+  if(!acc || !acc.holdings) return;
+  const h = acc.holdings.find(x=>x.id===hid);
+  if(!h) return;
+  if(hfield === 'units' || hfield === 'value'){
+    h[hfield] = Number(e.target.value)||0;
+  } else {
+    h[hfield] = e.target.value;
+  }
+  acc.balance = accountBalance(acc);
+  // update the readonly balance display
+  const balInput = document.querySelector(`#assetsRows input.balance[data-id="${accId}"]`);
+  if(balInput) balInput.value = acc.balance;
+  updateHoldingsSum(acc);
+  saveData();
+  renderSummary();
 }
 
 function onFieldChange(e){
   const {id, field} = e.target.dataset;
   const acc = data.accounts.find(a=>a.id===id);
   if(!acc) return;
-  acc[field] = field==='balance' ? Number(e.target.value)||0 : e.target.value;
+  if(field==='balance' || field==='originalAmount' || field==='interestRate'){
+    const n = e.target.value === '' ? null : (Number(e.target.value)||0);
+    if(field==='balance'){
+      // only allow manual balance edit when no holdings
+      if(acc.holdings && acc.holdings.length) return;
+      acc.balance = n||0;
+    } else {
+      acc[field] = n;
+    }
+  } else {
+    acc[field] = e.target.value;
+  }
   saveData();
   renderSummary();
   renderTallies();
@@ -1829,7 +2043,10 @@ document.querySelectorAll('.add-row[data-type]').forEach(btn=>{
     data.accounts.push({
       id:uid(), name:'New ' + (type==='asset'?'Asset':'Liability'),
       category: type==='asset'?ASSET_CATS[0]:LIAB_CATS[0],
-      type, balance:0
+      type, balance:0,
+      holdings: type==='asset' ? [] : undefined,
+      originalAmount: type==='liability' ? null : undefined,
+      interestRate: type==='liability' ? null : undefined
     });
     saveData(); renderAll();
   });
