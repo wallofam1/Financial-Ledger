@@ -1025,6 +1025,42 @@
     border-top: 1px solid var(--border);
   }
 
+
+  .period-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .period-title-input {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    border-bottom: 1px solid transparent;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    padding: 4px 2px;
+    min-height: 36px;
+  }
+  .period-title-input:focus {
+    outline: none;
+    border-bottom-color: var(--accent);
+  }
+  .period-title-input::placeholder {
+    color: var(--text-tertiary);
+    font-weight: 500;
+  }
+  .period-title-row .pnet {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
 </style>
 </head>
 <body>
@@ -1849,8 +1885,8 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
 
 
 /* ---- Planner ---- */
-function defaultPeriod(){
-  return { income: 0, expenses: [] }; // expenses: [{id, desc, amount}]
+function defaultPeriod(i){
+  return { title: '', income: 0, expenses: [] }; // title freeform; expenses: [{id, desc, amount}]
 }
 
 function ensurePlanner(){
@@ -1865,9 +1901,10 @@ function ensurePlanner(){
     });
   }
   while(data.planner.periods.length < 4) data.planner.periods.push(defaultPeriod());
-  data.planner.periods = data.planner.periods.slice(0,4).map(p=>{
-    if(!p || typeof p !== 'object') return defaultPeriod();
+  data.planner.periods = data.planner.periods.slice(0,4).map((p, idx)=>{
+    if(!p || typeof p !== 'object') return defaultPeriod(idx);
     if(!Array.isArray(p.expenses)) p.expenses = [];
+    if(typeof p.title !== 'string') p.title = p.title ? String(p.title) : '';
     p.income = Number(p.income)||0;
     return p;
   });
@@ -1934,9 +1971,13 @@ function renderPlanner(){
       </div>
     `).join('') || '<div class="empty-note" style="padding:8px 0;text-align:left;">No expenses for this check yet.</div>';
 
+    const titlePlaceholder = 'Period ' + (i+1) + ' (e.g. Sep 5 – Sep 18)';
     return `
-      <div class="section period-card">
-        <h2>Check ${i+1} <span class="pnet">${fmt(pNet)}</span></h2>
+      <div class="section period-card" data-period="${i}">
+        <div class="period-title-row">
+          <input type="text" class="period-title-input" data-pi="${i}" data-field="title" value="${escapeHtml(p.title||'')}" placeholder="${titlePlaceholder}">
+          <span class="pnet">${fmt(pNet)}</span>
+        </div>
         <div class="paycheck-row">
           <label>Take-home</label>
           <input type="number" data-pi="${i}" data-field="income" value="${p.income||''}" step="any" placeholder="0">
@@ -1952,7 +1993,17 @@ function renderPlanner(){
     `;
   }).join('');
 
-  // income inputs
+  // title inputs — do not full re-render (keeps focus)
+  wrap.querySelectorAll('input[data-field="title"]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      ensurePlanner();
+      const i = Number(inp.dataset.pi);
+      data.planner.periods[i].title = inp.value;
+      saveData();
+    });
+  });
+
+  // income inputs — do not full re-render (keeps focus while typing)
   wrap.querySelectorAll('input[data-field="income"]').forEach(inp=>{
     inp.addEventListener('input', ()=>{
       ensurePlanner();
@@ -1960,8 +2011,14 @@ function renderPlanner(){
       data.planner.periods[i].income = Number(inp.value)||0;
       saveData();
       renderPlannerSummaryOnly();
-      // update this card's net label without full rebuild if possible — full render ok for simplicity
-      renderPlanner();
+      const card = inp.closest('.period-card');
+      if(card){
+        const p = data.planner.periods[i];
+        const pExp = periodExpenseTotal(p);
+        const pNet = (Number(p.income)||0) - pExp;
+        const netEl = card.querySelector('.pnet');
+        if(netEl) netEl.textContent = fmt(pNet);
+      }
     });
   });
 
