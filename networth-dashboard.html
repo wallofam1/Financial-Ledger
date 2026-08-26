@@ -964,6 +964,67 @@
     .paycheck-row { grid-template-columns: 90px 1fr; }
   }
 
+
+  .planner-periods {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 820px) {
+    .planner-periods { grid-template-columns: 1fr; }
+  }
+  .period-card h2 {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .period-card h2 .pnet {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--accent);
+  }
+  .period-card .paycheck-row { margin-bottom: 12px; }
+  .period-exp-list { margin-top: 4px; }
+  .period-exp-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 100px 28px;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .period-exp-row input[type=text],
+  .period-exp-row input[type=number] {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    min-height: 36px;
+    min-width: 0;
+  }
+  .period-exp-row input[type=number] { text-align: right; }
+  .period-exp-row input:focus { outline: none; border-color: var(--accent); }
+  .period-exp-row .del {
+    background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; font-size: 14px; padding: 4px;
+    min-width: 28px; min-height: 28px;
+  }
+  .period-exp-row .del:hover { color: var(--red); }
+  .period-actions {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+  }
+  .period-subtotal {
+    display: flex; justify-content: space-between;
+    font-size: 13px; color: var(--text-secondary);
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
 </style>
 </head>
 <body>
@@ -1267,11 +1328,11 @@
 
     <div class="summary summary-4" id="plannerSummary">
       <div class="card assets">
-        <div class="label">Gross pay (4 checks)</div>
+        <div class="label">Total income</div>
         <div class="figure" id="planGrossFig">$0</div>
       </div>
       <div class="card expense">
-        <div class="label">Expenses (period)</div>
+        <div class="label">Total expenses</div>
         <div class="figure" id="planExpFig">$0</div>
       </div>
       <div class="card net">
@@ -1284,31 +1345,13 @@
       </div>
     </div>
 
-    <div class="planner-grid">
-      <div class="section">
-        <h2>Next 4 biweekly paychecks</h2>
-        <div class="planner-hint">Enter expected take-home for each check over the next ~8 weeks.</div>
-        <div style="margin-top:14px;">
-          <div class="paycheck-row"><label>Check 1</label><input type="number" id="pay1" step="any" placeholder="0"></div>
-          <div class="paycheck-row"><label>Check 2</label><input type="number" id="pay2" step="any" placeholder="0"></div>
-          <div class="paycheck-row"><label>Check 3</label><input type="number" id="pay3" step="any" placeholder="0"></div>
-          <div class="paycheck-row"><label>Check 4</label><input type="number" id="pay4" step="any" placeholder="0"></div>
-        </div>
-        <div class="planner-total-row"><span>Total income</span><span class="val" id="planPayTotal">$0</span></div>
-        <button class="ghost" id="planFillLast" type="button" style="margin-top:10px;">Fill from last salary entry</button>
-      </div>
+    <div class="planner-hint" style="margin:-8px 0 16px;">Each card is one biweekly period. Income and expenses can differ per check.</div>
 
-      <div class="section">
-        <h2>Known expenses in period</h2>
-        <div class="planner-hint">Recurring items × 2 months (covers ~4 biweekly cycles). Uncheck to exclude.</div>
-        <div id="planExpList" style="margin-top:12px;"></div>
-        <div class="planner-total-row"><span>Period expenses</span><span class="val" id="planExpTotal">$0</span></div>
-      </div>
-    </div>
+    <div class="planner-periods" id="planPeriods"></div>
 
-    <div class="section">
+    <div class="section" style="margin-top:8px;">
       <h2>Allocate projected net</h2>
-      <div class="planner-hint">Drop the projected net into accounts to see ending balances. Does not change real account data.</div>
+      <div class="planner-hint">Drop the combined net into accounts to see ending balances. Scenario only — real balances unchanged.</div>
       <div class="alloc-head" style="margin-top:12px;"><span>Account</span><span>Add</span><span>Projected</span></div>
       <div id="planAllocList"></div>
       <div class="planner-remaining ok" id="planRemaining">
@@ -1472,7 +1515,7 @@ let data = loadDataLocal();
 if(!data.expenses) data.expenses = [];
 if(!data.incomes) data.incomes = [];
 if(!data._updatedAt) data._updatedAt = new Date().toISOString();
-if(!data.planner) data.planner = { paychecks:[0,0,0,0], excluded:[], allocations:{} };
+if(!data.planner) data.planner = { periods: null, allocations:{} };
 
 let chart, accountsChart, expenseChart, incomeChart;
 
@@ -1604,7 +1647,7 @@ async function pullFromCloud(isInitial, force){
         data.incomes.forEach(x=>{
           if(!x.frequency) x.frequency = x.recurring ? 'monthly' : 'one-time';
         });
-        if(!data.planner) data.planner = { paychecks:[0,0,0,0], excluded:[], allocations:{} };
+        if(!data.planner) data.planner = { periods: null, allocations:{} };
         data._updatedAt = remoteAt;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         // Render cash flow first (independent), then accounts — don't let one chart error block the rest
@@ -1804,41 +1847,57 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
 });
 
 
+
 /* ---- Planner ---- */
+function defaultPeriod(){
+  return { income: 0, expenses: [] }; // expenses: [{id, desc, amount}]
+}
+
 function ensurePlanner(){
-  if(!data.planner) data.planner = { paychecks:[0,0,0,0], excluded:[], allocations:{} };
-  if(!Array.isArray(data.planner.paychecks) || data.planner.paychecks.length < 4){
-    data.planner.paychecks = [0,0,0,0];
+  if(!data.planner) data.planner = {};
+  // migrate old paychecks shape → periods
+  if(!Array.isArray(data.planner.periods) || data.planner.periods.length < 4){
+    const oldPays = Array.isArray(data.planner.paychecks) ? data.planner.paychecks : [0,0,0,0];
+    data.planner.periods = [0,1,2,3].map(i=>{
+      const p = defaultPeriod();
+      p.income = Number(oldPays[i])||0;
+      return p;
+    });
   }
-  if(!Array.isArray(data.planner.excluded)) data.planner.excluded = [];
+  while(data.planner.periods.length < 4) data.planner.periods.push(defaultPeriod());
+  data.planner.periods = data.planner.periods.slice(0,4).map(p=>{
+    if(!p || typeof p !== 'object') return defaultPeriod();
+    if(!Array.isArray(p.expenses)) p.expenses = [];
+    p.income = Number(p.income)||0;
+    return p;
+  });
   if(!data.planner.allocations || typeof data.planner.allocations !== 'object') data.planner.allocations = {};
 }
 
-function plannerPeriodExpenseItems(){
-  // Recurring expenses as monthly equiv × 2 for ~4 biweekly cycles
+function halfMonthRecurringExpenses(){
   return recurringItems('expenses').map(x=>{
     const mo = monthlyEquivalent(x);
     return {
-      id: x.id,
-      label: (x.desc || x.category || 'Expense'),
-      category: x.category || '',
-      monthly: mo,
-      period: mo * 2
+      id: uid(),
+      desc: (x.desc || x.category || 'Expense') + (x.category && x.desc ? '' : ''),
+      amount: Math.round((mo / 2) * 100) / 100,
+      fromRecurring: true
     };
   });
 }
 
+function periodExpenseTotal(p){
+  return (p.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
+}
+
 function plannerGross(){
   ensurePlanner();
-  return data.planner.paychecks.reduce((s,v)=>s+(Number(v)||0),0);
+  return data.planner.periods.reduce((s,p)=>s+(Number(p.income)||0),0);
 }
 
 function plannerExpenses(){
   ensurePlanner();
-  const excluded = new Set(data.planner.excluded || []);
-  return plannerPeriodExpenseItems()
-    .filter(x=>!excluded.has(x.id))
-    .reduce((s,x)=>s+x.period, 0);
+  return data.planner.periods.reduce((s,p)=>s+periodExpenseTotal(p),0);
 }
 
 function plannerNet(){
@@ -1852,13 +1911,6 @@ function plannerAllocated(){
 
 function renderPlanner(){
   ensurePlanner();
-  // paychecks
-  for(let i=0;i<4;i++){
-    const el = document.getElementById('pay'+(i+1));
-    if(el && document.activeElement !== el){
-      el.value = data.planner.paychecks[i] ? data.planner.paychecks[i] : '';
-    }
-  }
   const gross = plannerGross();
   const exp = plannerExpenses();
   const net = plannerNet();
@@ -1869,37 +1921,109 @@ function renderPlanner(){
   document.getElementById('planExpFig').textContent = fmt(exp);
   document.getElementById('planNetFig').textContent = fmt(net);
   document.getElementById('planLeftFig').textContent = fmt(left);
-  document.getElementById('planPayTotal').textContent = fmt(gross);
-  document.getElementById('planExpTotal').textContent = fmt(exp);
 
-  // expense checklist
-  const expList = document.getElementById('planExpList');
-  const items = plannerPeriodExpenseItems();
-  const excluded = new Set(data.planner.excluded || []);
-  if(!items.length){
-    expList.innerHTML = '<div class="empty-note" style="padding:16px 0;">No recurring expenses yet — mark items as recurring in Cash Flow.</div>';
-  } else {
-    expList.innerHTML = items.map(x=>`
-      <label class="exp-check-row">
-        <input type="checkbox" data-pid="${x.id}" ${excluded.has(x.id)?'':'checked'}>
-        <span class="ename">${escapeHtml(x.label)}${x.category?` <span style="color:var(--text-tertiary);font-size:12px;">${escapeHtml(x.category)}</span>`:''}</span>
-        <span class="eamt">${fmt(x.period)}</span>
-      </label>
-    `).join('');
-    expList.querySelectorAll('input[type=checkbox]').forEach(cb=>{
-      cb.addEventListener('change', ()=>{
-        ensurePlanner();
-        const id = cb.dataset.pid;
-        if(cb.checked){
-          data.planner.excluded = (data.planner.excluded||[]).filter(x=>x!==id);
-        } else {
-          if(!data.planner.excluded.includes(id)) data.planner.excluded.push(id);
-        }
-        saveData();
-        renderPlanner();
-      });
+  const wrap = document.getElementById('planPeriods');
+  wrap.innerHTML = data.planner.periods.map((p, i)=>{
+    const pExp = periodExpenseTotal(p);
+    const pNet = (Number(p.income)||0) - pExp;
+    const rows = (p.expenses||[]).map(e=>`
+      <div class="period-exp-row">
+        <input type="text" data-pi="${i}" data-eid="${e.id}" data-field="desc" value="${escapeHtml(e.desc||'')}" placeholder="Expense description">
+        <input type="number" data-pi="${i}" data-eid="${e.id}" data-field="amount" value="${e.amount||''}" step="any" placeholder="0">
+        <button type="button" class="del" data-pi="${i}" data-eid="${e.id}" title="Remove">✕</button>
+      </div>
+    `).join('') || '<div class="empty-note" style="padding:8px 0;text-align:left;">No expenses for this check yet.</div>';
+
+    return `
+      <div class="section period-card">
+        <h2>Check ${i+1} <span class="pnet">${fmt(pNet)}</span></h2>
+        <div class="paycheck-row">
+          <label>Take-home</label>
+          <input type="number" data-pi="${i}" data-field="income" value="${p.income||''}" step="any" placeholder="0">
+        </div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:6px;">Expenses this period</div>
+        <div class="period-exp-list">${rows}</div>
+        <div class="period-actions">
+          <button type="button" class="ghost plan-add-exp" data-pi="${i}">+ Add expense</button>
+          <button type="button" class="ghost plan-load-rec" data-pi="${i}">Load ½-month recurring</button>
+        </div>
+        <div class="period-subtotal"><span>Expenses</span><span>${fmt(pExp)}</span></div>
+      </div>
+    `;
+  }).join('');
+
+  // income inputs
+  wrap.querySelectorAll('input[data-field="income"]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      ensurePlanner();
+      const i = Number(inp.dataset.pi);
+      data.planner.periods[i].income = Number(inp.value)||0;
+      saveData();
+      renderPlannerSummaryOnly();
+      // update this card's net label without full rebuild if possible — full render ok for simplicity
+      renderPlanner();
     });
-  }
+  });
+
+  // expense field inputs — careful not to lose focus: update data on input, refresh totals only
+  wrap.querySelectorAll('.period-exp-row input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      ensurePlanner();
+      const i = Number(inp.dataset.pi);
+      const e = data.planner.periods[i].expenses.find(x=>x.id===inp.dataset.eid);
+      if(!e) return;
+      if(inp.dataset.field === 'amount') e.amount = Number(inp.value)||0;
+      else e.desc = inp.value;
+      saveData();
+      renderPlannerSummaryOnly();
+      // update period net / expense subtotal in-place
+      const card = inp.closest('.period-card');
+      if(card){
+        const p = data.planner.periods[i];
+        const pExp = periodExpenseTotal(p);
+        const pNet = (Number(p.income)||0) - pExp;
+        const netEl = card.querySelector('.pnet');
+        if(netEl) netEl.textContent = fmt(pNet);
+        const sub = card.querySelector('.period-subtotal span:last-child');
+        if(sub) sub.textContent = fmt(pExp);
+      }
+    });
+  });
+
+  wrap.querySelectorAll('.period-exp-row .del').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ensurePlanner();
+      const i = Number(btn.dataset.pi);
+      data.planner.periods[i].expenses = data.planner.periods[i].expenses.filter(x=>x.id!==btn.dataset.eid);
+      saveData();
+      renderPlanner();
+    });
+  });
+
+  wrap.querySelectorAll('.plan-add-exp').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ensurePlanner();
+      const i = Number(btn.dataset.pi);
+      data.planner.periods[i].expenses.push({ id: uid(), desc: '', amount: 0 });
+      saveData();
+      renderPlanner();
+    });
+  });
+
+  wrap.querySelectorAll('.plan-load-rec').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ensurePlanner();
+      const i = Number(btn.dataset.pi);
+      const extras = halfMonthRecurringExpenses();
+      if(!extras.length){
+        alert('No recurring expenses found. Mark items as recurring in Cash Flow first.');
+        return;
+      }
+      data.planner.periods[i].expenses = data.planner.periods[i].expenses.concat(extras);
+      saveData();
+      renderPlanner();
+    });
+  });
 
   // allocations
   const allocList = document.getElementById('planAllocList');
@@ -1929,23 +2053,15 @@ function renderPlanner(){
         if(v) data.planner.allocations[inp.dataset.aid] = v;
         else delete data.planner.allocations[inp.dataset.aid];
         saveData();
-        // light update without full re-render to keep focus
-        const gross = plannerGross();
-        const exp = plannerExpenses();
-        const net = gross - exp;
-        const allocated = plannerAllocated();
-        const left = net - allocated;
+        const left = plannerNet() - plannerAllocated();
         document.getElementById('planLeftFig').textContent = fmt(left);
-        document.getElementById('planNetFig').textContent = fmt(net);
         const row = inp.closest('.alloc-row');
         const acc = data.accounts.find(a=>a.id===inp.dataset.aid);
-        if(row && acc){
-          row.querySelector('.proj').textContent = fmt(accountBalance(acc) + v);
-        }
+        if(row && acc) row.querySelector('.proj').textContent = fmt(accountBalance(acc)+v);
         const rem = document.getElementById('planRemaining');
         const remVal = document.getElementById('planRemainingVal');
         remVal.textContent = fmt(left);
-        rem.className = 'planner-remaining ' + (Math.abs(left) < 0.01 ? 'ok' : (left < 0 ? 'warn' : 'ok'));
+        rem.className = 'planner-remaining ' + (left < -0.01 ? 'warn' : 'ok');
       });
     });
   }
@@ -1953,46 +2069,23 @@ function renderPlanner(){
   const rem = document.getElementById('planRemaining');
   const remVal = document.getElementById('planRemainingVal');
   if(remVal) remVal.textContent = fmt(left);
-  if(rem) rem.className = 'planner-remaining ' + (Math.abs(left) < 0.01 ? 'ok' : (left < 0 ? 'warn' : 'ok'));
+  if(rem) rem.className = 'planner-remaining ' + (left < -0.01 ? 'warn' : 'ok');
+}
+
+function renderPlannerSummaryOnly(){
+  const gross = plannerGross();
+  const exp = plannerExpenses();
+  const net = gross - exp;
+  const left = net - plannerAllocated();
+  document.getElementById('planGrossFig').textContent = fmt(gross);
+  document.getElementById('planExpFig').textContent = fmt(exp);
+  document.getElementById('planNetFig').textContent = fmt(net);
+  document.getElementById('planLeftFig').textContent = fmt(left);
+  const remVal = document.getElementById('planRemainingVal');
+  if(remVal) remVal.textContent = fmt(left);
 }
 
 function bindPlannerInputs(){
-  for(let i=0;i<4;i++){
-    const el = document.getElementById('pay'+(i+1));
-    if(!el || el._bound) continue;
-    el._bound = true;
-    el.addEventListener('input', ()=>{
-      ensurePlanner();
-      data.planner.paychecks[i] = Number(el.value)||0;
-      saveData();
-      renderPlanner();
-    });
-  }
-  const fill = document.getElementById('planFillLast');
-  if(fill && !fill._bound){
-    fill._bound = true;
-    fill.addEventListener('click', ()=>{
-      ensurePlanner();
-      // prefer recurring salary/income monthly → biweekly
-      const recurringInc = recurringItems('incomes');
-      let biweekly = 0;
-      if(recurringInc.length){
-        const monthly = recurringInc.reduce((s,x)=>s+monthlyEquivalent(x),0);
-        biweekly = monthly * 12 / 26;
-      } else {
-        const salaries = (data.incomes||[]).filter(x=>/salary|pay|wage/i.test(x.category+' '+x.desc));
-        const pool = salaries.length ? salaries : (data.incomes||[]);
-        if(pool.length){
-          const last = [...pool].sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-          biweekly = Number(last.amount)||0;
-        }
-      }
-      biweekly = Math.round(biweekly * 100) / 100;
-      data.planner.paychecks = [biweekly, biweekly, biweekly, biweekly];
-      saveData();
-      renderPlanner();
-    });
-  }
   const clear = document.getElementById('planClearAlloc');
   if(clear && !clear._bound){
     clear._bound = true;
@@ -2016,7 +2109,6 @@ function bindPlannerInputs(){
       const each = Math.round((net / targets.length) * 100) / 100;
       data.planner.allocations = {};
       targets.forEach(a=>{ data.planner.allocations[a.id] = each; });
-      // fix rounding residue on first
       const sum = targets.reduce((s,a)=>s+(data.planner.allocations[a.id]||0),0);
       const diff = Math.round((net - sum)*100)/100;
       if(targets[0]) data.planner.allocations[targets[0].id] = Math.round(((data.planner.allocations[targets[0].id]||0)+diff)*100)/100;
