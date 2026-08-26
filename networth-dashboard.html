@@ -639,6 +639,14 @@
     .holdings-panel { padding-left: 8px; }
   }
 
+
+  .entry-row select.exp-freq {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 10px 8px; border-radius: var(--radius-sm);
+    width: 110px; min-height: 42px;
+  }
+  .entry-row select.exp-freq:focus { outline: none; border-color: var(--accent); }
+
 </style>
 </head>
 <body>
@@ -963,10 +971,10 @@
       <label>Amount</label>
       <input type="number" id="mAmount" placeholder="0" inputmode="decimal" step="0.01">
     </div>
-    <label class="modal-check">
-      <input type="checkbox" id="mRecurring">
-      Recurring monthly
-    </label>
+    <div class="modal-field">
+      <label>Frequency</label>
+      <select id="mFreq"></select>
+    </div>
     <div class="modal-actions">
       <button class="ghost" id="mCancel">Cancel</button>
       <button class="primary" id="mSubmit">Add</button>
@@ -1034,6 +1042,14 @@ const SYNC_CFG_KEY = 'ledger-sync-cfg';
 const ASSET_CATS = ['Cash','Investments','Stocks','Blockchain','Retirement','Real Estate','Vehicles','Other'];
 const LIAB_CATS = ['Credit Card','Loan','Mortgage','Other'];
 const EXPENSE_CATS = ['Housing','Utilities','Groceries','Dining','Transportation','Insurance','Healthcare','Entertainment','Shopping','Subscriptions','Travel','Education','Personal Care','Debt Payment','Savings & Investments','Gifts & Donations','Other'];
+const FREQ_OPTIONS = [
+  {value:'one-time', label:'One-time'},
+  {value:'weekly', label:'Weekly'},
+  {value:'biweekly', label:'Biweekly'},
+  {value:'monthly', label:'Monthly'},
+  {value:'quarterly', label:'Quarterly'},
+  {value:'yearly', label:'Yearly'}
+];
 const INCOME_CATS = ['Salary','Freelance','Investments','Side Hustle','Interest','Dividends','Gifts','Refunds','Other'];
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
@@ -1692,19 +1708,37 @@ function categoryTotals(list){
   return Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
 }
 
+function isRecurring(x){
+  const f = x.frequency || (x.recurring ? 'monthly' : 'one-time');
+  return f && f !== 'one-time';
+}
+
+function monthlyEquivalent(x){
+  const amt = Number(x.amount)||0;
+  const f = x.frequency || (x.recurring ? 'monthly' : 'one-time');
+  switch(f){
+    case 'weekly': return amt * (52/12);
+    case 'biweekly': return amt * (26/12);
+    case 'monthly': return amt;
+    case 'quarterly': return amt / 3;
+    case 'yearly': return amt / 12;
+    default: return 0;
+  }
+}
+
 function recurringItems(collection){
   const map = {};
-  data[collection].filter(x=>x.recurring).forEach(x=>{
+  data[collection].filter(isRecurring).forEach(x=>{
     const key = (x.category||'') + '|' + (x.desc||'').trim().toLowerCase();
     if(!map[key] || (x.date||'') > (map[key].date||'')){
       map[key] = x;
     }
   });
-  return Object.values(map).sort((a,b)=>(Number(b.amount)||0)-(Number(a.amount)||0));
+  return Object.values(map).sort((a,b)=> monthlyEquivalent(b) - monthlyEquivalent(a));
 }
 
 function recurringMonthlyTotal(collection){
-  return recurringItems(collection).reduce((s,x)=>s+(Number(x.amount)||0),0);
+  return recurringItems(collection).reduce((s,x)=> s + monthlyEquivalent(x), 0);
 }
 
 function hasLoggedThisMonth(collection, item){
@@ -1759,10 +1793,9 @@ function renderExpenseRows(){
       </select>
       <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(exp.desc)}" data-id="${exp.id}" data-field="desc">
       <input class="exp-amount" type="number" value="${exp.amount}" data-id="${exp.id}" data-field="amount">
-      <label class="exp-recurring-label" title="Recurring">
-        <input type="checkbox" class="exp-recurring" ${exp.recurring?'checked':''} data-id="${exp.id}" data-field="recurring">
-        <span>Recurring</span>
-      </label>
+      <select class="exp-freq" data-id="${exp.id}" data-field="frequency">
+        ${FREQ_OPTIONS.map(f=>`<option value="${f.value}" ${(exp.frequency||(exp.recurring?'monthly':'one-time'))===f.value?'selected':''}>${f.label}</option>`).join('')}
+      </select>
       <button class="del" data-id="${exp.id}" title="Remove">✕</button>
     `;
     wrap.appendChild(row);
@@ -1774,10 +1807,7 @@ function bindEntryEvents(wrap, collection){
   wrap.querySelectorAll('input[type=text], input[type=number], input[type=date]').forEach(el=>{
     el.addEventListener('input', (e)=> onEntryFieldChange(e, collection));
   });
-  wrap.querySelectorAll('.exp-recurring').forEach(el=>{
-    el.addEventListener('change', (e)=> onEntryFieldChange(e, collection));
-  });
-  wrap.querySelectorAll('select.exp-cat').forEach(el=>{
+  wrap.querySelectorAll('select.exp-cat, select.exp-freq').forEach(el=>{
     el.addEventListener('change', (e)=> onEntryFieldChange(e, collection));
   });
   wrap.querySelectorAll('.del').forEach(el=>{
@@ -1793,6 +1823,9 @@ function onEntryFieldChange(e, collection){
   if(!item) return;
   if(field==='recurring'){
     item.recurring = e.target.checked;
+  } else if(field==='frequency'){
+    item.frequency = e.target.value;
+    item.recurring = e.target.value !== 'one-time';
   } else {
     item[field] = field==='amount' ? Number(e.target.value)||0 : e.target.value;
   }
@@ -1908,12 +1941,14 @@ function renderRecurringList(collection){
   emptyNote.style.display='none';
   wrap.innerHTML = items.map(x=>{
     const logged = hasLoggedThisMonth(collection, x);
+    const freqLabel = (FREQ_OPTIONS.find(f=>f.value===(x.frequency||'monthly'))||{}).label || 'Monthly';
+    const moEq = monthlyEquivalent(x);
     return `
       <div class="row">
         <span style="flex:1;font-size:14px;">${escapeHtml(x.desc || x.category || 'Untitled')}
-          <span style="color:var(--text-tertiary);font-size:12px;margin-left:6px;">${escapeHtml(x.category)}</span>
+          <span style="color:var(--text-tertiary);font-size:12px;margin-left:6px;">${escapeHtml(x.category)} · ${freqLabel}</span>
         </span>
-        <span style="font-size:14px;font-weight:500;color:${isExp?'var(--red)':'var(--green)'};margin-right:8px;">${fmt(x.amount)}</span>
+        <span style="font-size:14px;font-weight:500;color:${isExp?'var(--red)':'var(--green)'};margin-right:8px;" title="${fmt(x.amount)} ${freqLabel.toLowerCase()}">${fmt(moEq)}/mo</span>
         <button class="log-btn ${logged?'done':''}" data-collection="${collection}" data-id="${x.id}">
           ${logged ? 'Logged' : 'Log this month'}
         </button>
@@ -1964,10 +1999,9 @@ function renderIncomeRows(){
       </select>
       <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(inc.desc)}" data-id="${inc.id}" data-field="desc">
       <input class="exp-amount" type="number" value="${inc.amount}" data-id="${inc.id}" data-field="amount">
-      <label class="exp-recurring-label" title="Recurring">
-        <input type="checkbox" class="exp-recurring" ${inc.recurring?'checked':''} data-id="${inc.id}" data-field="recurring">
-        <span>Recurring</span>
-      </label>
+      <select class="exp-freq" data-id="${inc.id}" data-field="frequency">
+        ${FREQ_OPTIONS.map(f=>`<option value="${f.value}" ${(inc.frequency||(inc.recurring?'monthly':'one-time'))===f.value?'selected':''}>${f.label}</option>`).join('')}
+      </select>
       <button class="del" data-id="${inc.id}" title="Remove">✕</button>
     `;
     wrap.appendChild(row);
@@ -2058,13 +2092,13 @@ document.querySelectorAll('.add-row[data-type]').forEach(btn=>{
 
 document.getElementById('addExpenseBtn').addEventListener('click', ()=>{
   const today = new Date().toISOString().slice(0,10);
-  data.expenses.push({id:uid(), date:today, category:EXPENSE_CATS[0], desc:'', amount:0, recurring:false});
+  data.expenses.push({id:uid(), date:today, category:EXPENSE_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time'});
   saveData(); renderExpenseAll();
 });
 
 document.getElementById('addIncomeBtn').addEventListener('click', ()=>{
   const today = new Date().toISOString().slice(0,10);
-  data.incomes.push({id:uid(), date:today, category:INCOME_CATS[0], desc:'', amount:0, recurring:false});
+  data.incomes.push({id:uid(), date:today, category:INCOME_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time'});
   saveData(); renderIncomeAll();
 });
 
@@ -2127,7 +2161,7 @@ function openModal(preType){
   document.getElementById('mDate').value = new Date().toISOString().slice(0,10);
   document.getElementById('mDesc').value = '';
   document.getElementById('mAmount').value = '';
-  document.getElementById('mRecurring').checked = false;
+  const mf = document.getElementById('mFreq'); if(mf) mf.value = 'one-time';
   modalOverlay.classList.add('open');
   setTimeout(()=> document.getElementById('mAmount').focus(), 50);
 }
@@ -2140,6 +2174,8 @@ function fillModalCats(){
   const cats = modalType === 'expense' ? EXPENSE_CATS : INCOME_CATS;
   const sel = document.getElementById('mCat');
   sel.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  const freq = document.getElementById('mFreq');
+  if(freq) freq.innerHTML = FREQ_OPTIONS.map(f=>`<option value="${f.value}">${f.label}</option>`).join('');
 }
 
 document.getElementById('fabBtn').addEventListener('click', ()=> openModal());
@@ -2158,13 +2194,15 @@ document.querySelectorAll('.modal-type button').forEach(btn=>{
 document.getElementById('mSubmit').addEventListener('click', ()=>{
   const amount = Number(document.getElementById('mAmount').value)||0;
   if(!amount){ document.getElementById('mAmount').focus(); return; }
+  const freqVal = (document.getElementById('mFreq') && document.getElementById('mFreq').value) || 'one-time';
   const entry = {
     id: uid(),
     date: document.getElementById('mDate').value || new Date().toISOString().slice(0,10),
     category: document.getElementById('mCat').value,
     desc: document.getElementById('mDesc').value.trim(),
     amount,
-    recurring: document.getElementById('mRecurring').checked
+    frequency: freqVal,
+    recurring: freqVal !== 'one-time'
   };
   if(modalType === 'expense'){
     data.expenses.push(entry);
