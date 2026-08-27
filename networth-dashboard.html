@@ -362,7 +362,8 @@
         "desc desc del"
         "date cat cat"
         "amount freq freq"
-        "credit credit credit";
+        "credit credit credit"
+        "debit debit debit";
       gap: 6px;
       padding: 10px 0;
       align-items: center;
@@ -412,6 +413,13 @@
     }
     .entry-row select.exp-credit {
       grid-area: credit !important;
+      width: 100% !important;
+      font-size: 16px !important;
+      min-height: 36px !important;
+      padding: 6px 8px !important;
+    }
+    .entry-row select.exp-debit {
+      grid-area: debit !important;
       width: 100% !important;
       font-size: 16px !important;
       min-height: 36px !important;
@@ -1077,6 +1085,27 @@
   }
   .entry-row select.exp-credit:focus { outline: none; border-color: var(--accent); }
 
+
+  .month-nav {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .month-nav span {
+    font-size: 14px; font-weight: 600; color: var(--text); min-width: 140px; text-align: center;
+  }
+  .month-nav .ghost { padding: 8px 12px; min-height: 36px; }
+  @media (min-width: 641px) {
+    .panel-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+    .month-nav { margin-top: 0; }
+  }
+
+
+  .entry-row select.exp-debit {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 10px 8px; border-radius: var(--radius-sm);
+    width: 150px; min-height: 42px; flex-shrink: 0;
+  }
+
 </style>
 </head>
 <body>
@@ -1263,6 +1292,12 @@
       <div>
         <span class="eyebrow">Monthly tracking</span>
         <h1>Cash Flow</h1>
+      </div>
+      <div class="month-nav" id="cfMonthNav">
+        <button type="button" class="ghost" id="cfMonthPrev" aria-label="Previous month">‹</button>
+        <span id="cfMonthLabel">This month</span>
+        <button type="button" class="ghost" id="cfMonthNext" aria-label="Next month">›</button>
+        <button type="button" class="ghost" id="cfMonthNow">Today</button>
       </div>
     </div>
 
@@ -1458,8 +1493,12 @@
     </div>
     <div class="modal-field" id="mCreditWrap">
       <label>Pays into account</label>
-      <select id="mCredit"><option value="">Spend only</option></select>
-      <div class="settings-hint">Optional. Treat as a bill, but add the amount to an asset (e.g. brokerage, savings).</div>
+      <select id="mCredit"><option value="">None</option></select>
+    </div>
+    <div class="modal-field" id="mDebitWrap">
+      <label>Paid from account</label>
+      <select id="mDebit"><option value="">None</option></select>
+      <div class="settings-hint">Use both to move money: expense in cash flow, minus checking, plus brokerage.</div>
     </div>
     <div class="modal-actions">
       <button class="ghost" id="mCancel">Cancel</button>
@@ -1850,17 +1889,36 @@ function creditAsset(accId, delta, label){
   }
 }
 
-function applyExpenseCreditChange(item, prevAmount, prevAccountId){
+function cashAccountOptions(selectedId){
+  const cash = data.accounts.filter(a=>a.type==='asset' && /cash|checking|savings/i.test((a.category||'')+' '+(a.name||'')));
+  const list = cash.length ? cash : data.accounts.filter(a=>a.type==='asset');
+  return list.map(a=>
+    `<option value="${a.id}" ${a.id===selectedId?'selected':''}>${escapeHtml(a.name)}</option>`
+  ).join('');
+}
+
+function applyExpenseCreditChange(item, prevAmount, prevAccountId, prevDebitId){
   const label = item.desc || item.category || 'Contribution';
   const newAmt = Number(item.amount)||0;
   const newAcc = item.creditAccountId || '';
+  const newDebit = item.debitAccountId || '';
   prevAmount = Number(prevAmount)||0;
   prevAccountId = prevAccountId || '';
+  prevDebitId = prevDebitId || '';
+  // reverse previous destination credit
   if(prevAccountId && prevAmount){
     creditAsset(prevAccountId, -prevAmount, label);
   }
+  // reverse previous source debit
+  if(prevDebitId && prevAmount){
+    creditAsset(prevDebitId, prevAmount, label);
+  }
+  // apply new
   if(newAcc && newAmt){
     creditAsset(newAcc, newAmt, label);
+  }
+  if(newDebit && newAmt){
+    creditAsset(newDebit, -newAmt, label);
   }
 }
 
@@ -1909,8 +1967,11 @@ function softDelete(collection, id, label){
   const idx = arr.findIndex(x => x.id === id);
   if(idx === -1) return;
   const item = arr[idx];
-  if(collection==='expenses' && item.creditAccountId){
-    creditAsset(item.creditAccountId, -(Number(item.amount)||0), item.desc || item.category || 'Contribution');
+  if(collection==='expenses'){
+    const amt = Number(item.amount)||0;
+    const label = item.desc || item.category || 'Contribution';
+    if(item.creditAccountId) creditAsset(item.creditAccountId, -amt, label);
+    if(item.debitAccountId) creditAsset(item.debitAccountId, amt, label);
   }
   arr.splice(idx, 1);
   saveData();
@@ -1937,8 +1998,11 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
   if(!undoStack) return;
   const { collection, item, index } = undoStack;
   data[collection].splice(index, 0, item);
-  if(collection==='expenses' && item.creditAccountId){
-    creditAsset(item.creditAccountId, Number(item.amount)||0, item.desc || item.category || 'Contribution');
+  if(collection==='expenses'){
+    const amt = Number(item.amount)||0;
+    const label = item.desc || item.category || 'Contribution';
+    if(item.creditAccountId) creditAsset(item.creditAccountId, amt, label);
+    if(item.debitAccountId) creditAsset(item.debitAccountId, -amt, label);
   }
   saveData();
   undoStack = null;
@@ -1954,7 +2018,7 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
 
 /* ---- Planner ---- */
 function defaultPeriod(i){
-  return { title: '', income: 0, expenses: [] }; // title freeform; expenses: [{id, desc, amount}]
+  return { title: '', income: 0, expenses: [], dueIds: [] };
 }
 
 function ensurePlanner(){
@@ -1972,6 +2036,7 @@ function ensurePlanner(){
   data.planner.periods = data.planner.periods.slice(0,4).map((p, idx)=>{
     if(!p || typeof p !== 'object') return defaultPeriod(idx);
     if(!Array.isArray(p.expenses)) p.expenses = [];
+    if(!Array.isArray(p.dueIds)) p.dueIds = [];
     if(typeof p.title !== 'string') p.title = p.title ? String(p.title) : '';
     p.income = Number(p.income)||0;
     return p;
@@ -1991,8 +2056,13 @@ function halfMonthRecurringExpenses(){
   });
 }
 
+function periodDueTotal(p){
+  const ids = new Set(p.dueIds || []);
+  return recurringItems('expenses').filter(x=>ids.has(x.id)).reduce((s,x)=>s+(Number(x.amount)||0),0);
+}
 function periodExpenseTotal(p){
-  return (p.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
+  const extras = (p.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
+  return extras + periodDueTotal(p);
 }
 
 function plannerGross(){
@@ -2031,6 +2101,17 @@ function renderPlanner(){
   wrap.innerHTML = data.planner.periods.map((p, i)=>{
     const pExp = periodExpenseTotal(p);
     const pNet = (Number(p.income)||0) - pExp;
+    const dueSet = new Set(p.dueIds || []);
+    const rec = recurringItems('expenses');
+    const dueRows = rec.length ? rec.map(x=>`
+      <label class="exp-check-row">
+        <input type="checkbox" data-pi="${i}" data-due="${x.id}" ${dueSet.has(x.id)?'checked':''}>
+        <span class="ename">${escapeHtml(x.desc || x.category || 'Bill')}
+          <span style="color:var(--text-tertiary);font-size:12px;"> ${escapeHtml(x.category||'')}</span>
+        </span>
+        <span class="eamt">${fmt(x.amount)}</span>
+      </label>
+    `).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
     const rows = (p.expenses||[]).map(e=>`
       <div class="period-exp-row">
         <input type="text" data-pi="${i}" data-eid="${e.id}" data-field="desc" value="${escapeHtml(e.desc||'')}" placeholder="Expense description">
@@ -2050,13 +2131,14 @@ function renderPlanner(){
           <label>Take-home</label>
           <input type="number" data-pi="${i}" data-field="income" value="${p.income||''}" step="any" placeholder="0">
         </div>
-        <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:6px;">Expenses this period</div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin:4px 0 6px;">Bills due this paycheck</div>
+        <div class="period-due-list">${dueRows}</div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin:12px 0 6px;">Extra expenses this period</div>
         <div class="period-exp-list">${rows}</div>
         <div class="period-actions">
-          <button type="button" class="ghost plan-add-exp" data-pi="${i}">+ Add expense</button>
-          <button type="button" class="ghost plan-load-rec" data-pi="${i}">Load ½-month recurring</button>
+          <button type="button" class="ghost plan-add-exp" data-pi="${i}">+ Add extra expense</button>
         </div>
-        <div class="period-subtotal"><span>Expenses</span><span>${fmt(pExp)}</span></div>
+        <div class="period-subtotal"><span>Bills + extras</span><span>${fmt(pExp)}</span></div>
       </div>
     `;
   }).join('');
@@ -2135,16 +2217,14 @@ function renderPlanner(){
     });
   });
 
-  wrap.querySelectorAll('.plan-load-rec').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+  wrap.querySelectorAll('input[data-due]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
       ensurePlanner();
-      const i = Number(btn.dataset.pi);
-      const extras = halfMonthRecurringExpenses();
-      if(!extras.length){
-        alert('No recurring expenses found. Mark items as recurring in Cash Flow first.');
-        return;
-      }
-      data.planner.periods[i].expenses = data.planner.periods[i].expenses.concat(extras);
+      const i = Number(cb.dataset.pi);
+      const id = cb.dataset.due;
+      const set = new Set(data.planner.periods[i].dueIds || []);
+      if(cb.checked) set.add(id); else set.delete(id);
+      data.planner.periods[i].dueIds = [...set];
       saveData();
       renderPlanner();
     });
@@ -2273,6 +2353,21 @@ function switchTab(tabId){
 document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn=>{
   btn.addEventListener('click', ()=> switchTab(btn.dataset.tab));
 });
+
+function refreshCashFlowMonthUI(){
+  const lab = document.getElementById('cfMonthLabel');
+  if(lab) lab.textContent = monthLabel(activeMonthKey());
+  if(typeof renderExpenseAll === 'function') renderExpenseAll();
+  if(typeof renderIncomeAll === 'function') renderIncomeAll();
+  if(typeof renderDashExpenses === 'function') renderDashExpenses();
+}
+const cfPrev = document.getElementById('cfMonthPrev');
+const cfNext = document.getElementById('cfMonthNext');
+const cfNow = document.getElementById('cfMonthNow');
+if(cfPrev) cfPrev.addEventListener('click', ()=>{ cfMonth = shiftMonthKey(activeMonthKey(), -1); refreshCashFlowMonthUI(); });
+if(cfNext) cfNext.addEventListener('click', ()=>{ cfMonth = shiftMonthKey(activeMonthKey(), 1); refreshCashFlowMonthUI(); });
+if(cfNow) cfNow.addEventListener('click', ()=>{ cfMonth = currentMonthKey(); refreshCashFlowMonthUI(); });
+
 document.querySelectorAll('[data-goto]').forEach(btn=>{
   btn.addEventListener('click', ()=> switchTab(btn.dataset.goto));
 });
@@ -2582,8 +2677,23 @@ function renderAll(){
 }
 
 /* Shared helpers */
-function monthKeyOf(dateStr){ return dateStr ? dateStr.slice(0,7) : ''; }
-function currentMonthKey(){ return new Date().toISOString().slice(0,7); }
+function monthKeyOf(dateStr){ return dateStr ? String(dateStr).slice(0,7) : ''; }
+function currentMonthKey(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+function monthLabel(mk){
+  if(!mk || mk.length < 7) return 'This month';
+  const [y, mo] = mk.split('-');
+  return new Date(Number(y), Number(mo)-1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+function shiftMonthKey(mk, delta){
+  const [y, mo] = (mk || currentMonthKey()).split('-').map(Number);
+  const d = new Date(y, mo - 1 + delta, 1);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+let cfMonth = currentMonthKey();
+function activeMonthKey(){ return cfMonth || currentMonthKey(); }
 
 function categoryTotals(list){
   const byCat = {};
@@ -2628,7 +2738,7 @@ function recurringMonthlyTotal(collection){
 }
 
 function hasLoggedThisMonth(collection, item){
-  const mk = currentMonthKey();
+  const mk = activeMonthKey();
   const key = (item.category||'') + '|' + (item.desc||'').trim().toLowerCase();
   return data[collection].some(x =>
     monthKeyOf(x.date) === mk &&
@@ -2637,8 +2747,11 @@ function hasLoggedThisMonth(collection, item){
 }
 
 function logRecurringThisMonth(collection, item){
-  const today = new Date().toISOString().slice(0,10);
-  const mk = currentMonthKey();
+  const mk = activeMonthKey();
+  const [y, mo] = mk.split('-').map(Number);
+  const now = new Date();
+  const day = (now.getFullYear()===y && now.getMonth()+1===mo) ? now.getDate() : 1;
+  const today = mk + '-' + String(day).padStart(2,'0');
   const key = (item.category||'') + '|' + (item.desc||'').trim().toLowerCase();
   const already = data[collection].some(x =>
     monthKeyOf(x.date) === mk &&
@@ -2655,11 +2768,13 @@ function logRecurringThisMonth(collection, item){
     recurring: false,
     frequency: 'one-time',
     creditAccountId: item.creditAccountId || '',
+    debitAccountId: item.debitAccountId || '',
     _fromRecurringLog: true
   };
   data[collection].push(entry);
-  if(collection==='expenses' && entry.creditAccountId){
-    creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Contribution');
+  if(collection==='expenses'){
+    if(entry.creditAccountId) creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Contribution');
+    if(entry.debitAccountId) creditAsset(entry.debitAccountId, -entry.amount, entry.desc || entry.category || 'Contribution');
   }
   saveData();
   if(collection==='expenses' && typeof renderAll === 'function') renderAll();
@@ -2668,8 +2783,8 @@ function logRecurringThisMonth(collection, item){
 
 /* Expenses */
 function currentMonthExpenses(){
-  const mk = currentMonthKey();
-  return data.expenses.filter(x=> monthKeyOf(x.date)===mk);
+  const mk = activeMonthKey();
+  return (data.expenses||[]).filter(x=> monthKeyOf(x.date)===mk);
 }
 
 function renderExpenseRows(){
@@ -2677,7 +2792,8 @@ function renderExpenseRows(){
   if(!wrap) return;
   if(!data.expenses) data.expenses = [];
   wrap.innerHTML='';
-  const sorted = [...data.expenses].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  const mk = activeMonthKey();
+  const sorted = [...data.expenses].filter(x=> monthKeyOf(x.date)===mk).sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   sorted.forEach(exp=>{
     const row = document.createElement('div');
     row.className='entry-row';
@@ -2692,8 +2808,12 @@ function renderExpenseRows(){
         ${FREQ_OPTIONS.map(f=>`<option value="${f.value}" ${(exp.frequency||(exp.recurring?'monthly':'one-time'))===f.value?'selected':''}>${f.label}</option>`).join('')}
       </select>
       <select class="exp-credit" data-id="${exp.id}" data-field="creditAccountId" title="Pays into account">
-        <option value="">Spend only</option>
+        <option value="">Pays into: none</option>
         ${assetAccountOptions(exp.creditAccountId||'')}
+      </select>
+      <select class="exp-debit" data-id="${exp.id}" data-field="debitAccountId" title="Paid from account">
+        <option value="">Paid from: none</option>
+        ${assetAccountOptions(exp.debitAccountId||'')}
       </select>
       <button class="del" data-id="${exp.id}" title="Remove">✕</button>
     `;
@@ -2706,7 +2826,7 @@ function bindEntryEvents(wrap, collection){
   wrap.querySelectorAll('input[type=text], input[type=number], input[type=date]').forEach(el=>{
     el.addEventListener('input', (e)=> onEntryFieldChange(e, collection));
   });
-  wrap.querySelectorAll('select.exp-cat, select.exp-freq, select.exp-credit').forEach(el=>{
+  wrap.querySelectorAll('select.exp-cat, select.exp-freq, select.exp-credit, select.exp-debit').forEach(el=>{
     el.addEventListener('change', (e)=> onEntryFieldChange(e, collection));
   });
   wrap.querySelectorAll('.del').forEach(el=>{
@@ -2727,14 +2847,19 @@ function onEntryFieldChange(e, collection){
     item.recurring = e.target.value !== 'one-time';
   } else if(field==='amount' && collection==='expenses'){
     const prev = Number(item.amount)||0;
+    const delta = (Number(e.target.value)||0) - prev;
     item.amount = Number(e.target.value)||0;
-    if(item.creditAccountId){
-      creditAsset(item.creditAccountId, item.amount - prev, item.desc || item.category || 'Contribution');
-    }
+    const label = item.desc || item.category || 'Contribution';
+    if(item.creditAccountId && delta) creditAsset(item.creditAccountId, delta, label);
+    if(item.debitAccountId && delta) creditAsset(item.debitAccountId, -delta, label);
   } else if(field==='creditAccountId' && collection==='expenses'){
     const prevAcc = item.creditAccountId || '';
     item.creditAccountId = e.target.value || '';
-    applyExpenseCreditChange(item, item.amount, prevAcc);
+    applyExpenseCreditChange(item, item.amount, prevAcc, item.debitAccountId);
+  } else if(field==='debitAccountId' && collection==='expenses'){
+    const prevDebit = item.debitAccountId || '';
+    item.debitAccountId = e.target.value || '';
+    applyExpenseCreditChange(item, item.amount, item.creditAccountId, prevDebit);
   } else {
     item[field] = field==='amount' ? Number(e.target.value)||0 : e.target.value;
   }
@@ -2759,10 +2884,12 @@ function renderExpenseSummary(){
   document.getElementById('expRecurringFig').textContent = fmt(recurringMonthlyTotal('expenses'));
   const top = categoryTotals(monthExp)[0];
   document.getElementById('expTopCat').textContent = top ? top[0] : '—';
+  const labEl = document.querySelector('#sub-expenses .summary .card .label');
+  if(labEl) labEl.textContent = monthLabel(activeMonthKey());
 }
 
 function renderExpenseTally(){
-  const c = data.expenses.length;
+  const c = currentMonthExpenses().length;
   document.getElementById('expTally').textContent = c + (c===1?' entry':' entries');
 }
 
@@ -2905,8 +3032,8 @@ function renderExpenseAll(){
 
 /* Income */
 function currentMonthIncomes(){
-  const mk = currentMonthKey();
-  return data.incomes.filter(x=> monthKeyOf(x.date)===mk);
+  const mk = activeMonthKey();
+  return (data.incomes||[]).filter(x=> monthKeyOf(x.date)===mk);
 }
 
 function renderIncomeRows(){
@@ -2914,7 +3041,8 @@ function renderIncomeRows(){
   if(!wrap) return;
   if(!data.incomes) data.incomes = [];
   wrap.innerHTML='';
-  const sorted = [...data.incomes].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  const mk = activeMonthKey();
+  const sorted = [...data.incomes].filter(x=> monthKeyOf(x.date)===mk).sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   sorted.forEach(inc=>{
     const row = document.createElement('div');
     row.className='entry-row';
@@ -2946,11 +3074,11 @@ function renderIncomeSummary(){
   const labEl = document.querySelector('#sub-income .card.income .label, #sub-income .card .label');
   // first card label in income subpanel
   const firstLabel = document.querySelector('#sub-income .summary .card .label');
-  if(firstLabel) firstLabel.textContent = monthLabel(activeMonthKey('incomes'));
+  if(firstLabel) firstLabel.textContent = monthLabel(activeMonthKey());
 }
 
 function renderIncomeTally(){
-  const c = data.incomes.length;
+  const c = currentMonthIncomes().length;
   document.getElementById('incTally').textContent = c + (c===1?' entry':' entries');
 }
 
@@ -3107,11 +3235,13 @@ function fillModalCats(){
   const freq = document.getElementById('mFreq');
   if(freq) freq.innerHTML = FREQ_OPTIONS.map(f=>`<option value="${f.value}">${f.label}</option>`).join('');
   const credit = document.getElementById('mCredit');
+  const debit = document.getElementById('mDebit');
   const wrap = document.getElementById('mCreditWrap');
+  const dwrap = document.getElementById('mDebitWrap');
   if(wrap) wrap.style.display = modalType === 'expense' ? 'block' : 'none';
-  if(credit){
-    credit.innerHTML = '<option value="">Spend only</option>' + assetAccountOptions('');
-  }
+  if(dwrap) dwrap.style.display = modalType === 'expense' ? 'block' : 'none';
+  if(credit) credit.innerHTML = '<option value="">None</option>' + assetAccountOptions('');
+  if(debit) debit.innerHTML = '<option value="">None</option>' + assetAccountOptions('');
 }
 
 document.getElementById('fabBtn').addEventListener('click', ()=> openModal());
@@ -3132,6 +3262,7 @@ document.getElementById('mSubmit').addEventListener('click', ()=>{
   if(!amount){ document.getElementById('mAmount').focus(); return; }
   const freqVal = (document.getElementById('mFreq') && document.getElementById('mFreq').value) || 'one-time';
   const creditId = (document.getElementById('mCredit') && document.getElementById('mCredit').value) || '';
+  const debitId = (document.getElementById('mDebit') && document.getElementById('mDebit').value) || '';
   const entry = {
     id: uid(),
     date: document.getElementById('mDate').value || new Date().toISOString().slice(0,10),
@@ -3140,13 +3271,13 @@ document.getElementById('mSubmit').addEventListener('click', ()=>{
     amount,
     frequency: freqVal,
     recurring: freqVal !== 'one-time',
-    creditAccountId: modalType === 'expense' ? creditId : ''
+    creditAccountId: modalType === 'expense' ? creditId : '',
+    debitAccountId: modalType === 'expense' ? debitId : ''
   };
   if(modalType === 'expense'){
     data.expenses.push(entry);
-    if(entry.creditAccountId){
-      creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Contribution');
-    }
+    if(entry.creditAccountId) creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Contribution');
+    if(entry.debitAccountId) creditAsset(entry.debitAccountId, -entry.amount, entry.desc || entry.category || 'Contribution');
     saveData(); renderExpenseAll(); renderAll();
   } else {
     data.incomes.push(entry);
