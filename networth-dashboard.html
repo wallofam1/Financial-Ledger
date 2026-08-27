@@ -361,7 +361,8 @@
       grid-template-areas:
         "desc desc del"
         "date cat cat"
-        "amount freq freq";
+        "amount freq freq"
+        "credit credit credit";
       gap: 6px;
       padding: 10px 0;
       align-items: center;
@@ -404,6 +405,13 @@
     }
     .entry-row select.exp-freq {
       grid-area: freq !important;
+      width: 100% !important;
+      font-size: 16px !important;
+      min-height: 36px !important;
+      padding: 6px 8px !important;
+    }
+    .entry-row select.exp-credit {
+      grid-area: credit !important;
       width: 100% !important;
       font-size: 16px !important;
       min-height: 36px !important;
@@ -1061,6 +1069,14 @@
     flex-shrink: 0;
   }
 
+
+  .entry-row select.exp-credit {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 10px 8px; border-radius: var(--radius-sm);
+    width: 150px; min-height: 42px; flex-shrink: 0;
+  }
+  .entry-row select.exp-credit:focus { outline: none; border-color: var(--accent); }
+
 </style>
 </head>
 <body>
@@ -1440,6 +1456,11 @@
       <label>Frequency</label>
       <select id="mFreq"></select>
     </div>
+    <div class="modal-field" id="mCreditWrap">
+      <label>Pays into account</label>
+      <select id="mCredit"><option value="">Spend only</option></select>
+      <div class="settings-hint">Optional. Treat as a bill, but add the amount to an asset (e.g. brokerage, savings).</div>
+    </div>
     <div class="modal-actions">
       <button class="ghost" id="mCancel">Cancel</button>
       <button class="primary" id="mSubmit">Add</button>
@@ -1803,6 +1824,47 @@ function accountBalance(acc){
   return Number(acc.balance)||0;
 }
 
+function assetAccountOptions(selectedId){
+  return data.accounts.filter(a=>a.type==='asset').map(a=>
+    `<option value="${a.id}" ${a.id===selectedId?'selected':''}>${escapeHtml(a.name)}</option>`
+  ).join('');
+}
+
+/** Add (or subtract) money to an asset. Holdings accounts get a contribution holding. */
+function creditAsset(accId, delta, label){
+  if(!accId || !delta) return;
+  const acc = data.accounts.find(a=>a.id===accId);
+  if(!acc || acc.type!=='asset') return;
+  if(acc.holdings && acc.holdings.length){
+    const name = (label || 'Contribution').trim() || 'Contribution';
+    let h = acc.holdings.find(x => (x.name||'').toLowerCase() === name.toLowerCase());
+    if(!h){
+      h = { id: uid(), name, ticker: '', units: 0, value: 0 };
+      acc.holdings.push(h);
+    }
+    h.value = Math.round(((Number(h.value)||0) + delta) * 100) / 100;
+    if(Math.abs(h.value) < 0.005) acc.holdings = acc.holdings.filter(x=>x.id!==h.id);
+    acc.balance = accountBalance(acc);
+  } else {
+    acc.balance = Math.round(((Number(acc.balance)||0) + delta) * 100) / 100;
+  }
+}
+
+function applyExpenseCreditChange(item, prevAmount, prevAccountId){
+  const label = item.desc || item.category || 'Contribution';
+  const newAmt = Number(item.amount)||0;
+  const newAcc = item.creditAccountId || '';
+  prevAmount = Number(prevAmount)||0;
+  prevAccountId = prevAccountId || '';
+  if(prevAccountId && prevAmount){
+    creditAsset(prevAccountId, -prevAmount, label);
+  }
+  if(newAcc && newAmt){
+    creditAsset(newAcc, newAmt, label);
+  }
+}
+
+
 function totals(){
   let assets=0, liabilities=0;
   data.accounts.forEach(a=>{
@@ -1847,6 +1909,9 @@ function softDelete(collection, id, label){
   const idx = arr.findIndex(x => x.id === id);
   if(idx === -1) return;
   const item = arr[idx];
+  if(collection==='expenses' && item.creditAccountId){
+    creditAsset(item.creditAccountId, -(Number(item.amount)||0), item.desc || item.category || 'Contribution');
+  }
   arr.splice(idx, 1);
   saveData();
 
@@ -1872,6 +1937,9 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
   if(!undoStack) return;
   const { collection, item, index } = undoStack;
   data[collection].splice(index, 0, item);
+  if(collection==='expenses' && item.creditAccountId){
+    creditAsset(item.creditAccountId, Number(item.amount)||0, item.desc || item.category || 'Contribution');
+  }
   saveData();
   undoStack = null;
   clearTimeout(undoTimer);
@@ -2578,16 +2646,23 @@ function logRecurringThisMonth(collection, item){
   );
   if(already) return false;
 
-  data[collection].push({
+  const entry = {
     id: uid(),
     date: today,
     category: item.category,
     desc: item.desc || '',
     amount: Number(item.amount)||0,
     recurring: false,
+    frequency: 'one-time',
+    creditAccountId: item.creditAccountId || '',
     _fromRecurringLog: true
-  });
+  };
+  data[collection].push(entry);
+  if(collection==='expenses' && entry.creditAccountId){
+    creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Contribution');
+  }
   saveData();
+  if(collection==='expenses' && typeof renderAll === 'function') renderAll();
   return true;
 }
 
@@ -2616,6 +2691,10 @@ function renderExpenseRows(){
       <select class="exp-freq" data-id="${exp.id}" data-field="frequency">
         ${FREQ_OPTIONS.map(f=>`<option value="${f.value}" ${(exp.frequency||(exp.recurring?'monthly':'one-time'))===f.value?'selected':''}>${f.label}</option>`).join('')}
       </select>
+      <select class="exp-credit" data-id="${exp.id}" data-field="creditAccountId" title="Pays into account">
+        <option value="">Spend only</option>
+        ${assetAccountOptions(exp.creditAccountId||'')}
+      </select>
       <button class="del" data-id="${exp.id}" title="Remove">✕</button>
     `;
     wrap.appendChild(row);
@@ -2627,7 +2706,7 @@ function bindEntryEvents(wrap, collection){
   wrap.querySelectorAll('input[type=text], input[type=number], input[type=date]').forEach(el=>{
     el.addEventListener('input', (e)=> onEntryFieldChange(e, collection));
   });
-  wrap.querySelectorAll('select.exp-cat, select.exp-freq').forEach(el=>{
+  wrap.querySelectorAll('select.exp-cat, select.exp-freq, select.exp-credit').forEach(el=>{
     el.addEventListener('change', (e)=> onEntryFieldChange(e, collection));
   });
   wrap.querySelectorAll('.del').forEach(el=>{
@@ -2646,6 +2725,16 @@ function onEntryFieldChange(e, collection){
   } else if(field==='frequency'){
     item.frequency = e.target.value;
     item.recurring = e.target.value !== 'one-time';
+  } else if(field==='amount' && collection==='expenses'){
+    const prev = Number(item.amount)||0;
+    item.amount = Number(e.target.value)||0;
+    if(item.creditAccountId){
+      creditAsset(item.creditAccountId, item.amount - prev, item.desc || item.category || 'Contribution');
+    }
+  } else if(field==='creditAccountId' && collection==='expenses'){
+    const prevAcc = item.creditAccountId || '';
+    item.creditAccountId = e.target.value || '';
+    applyExpenseCreditChange(item, item.amount, prevAcc);
   } else {
     item[field] = field==='amount' ? Number(e.target.value)||0 : e.target.value;
   }
@@ -2653,6 +2742,8 @@ function onEntryFieldChange(e, collection){
   if(collection==='expenses'){
     renderExpenseSummary(); renderBreakdown('exp'); renderExpenseChart();
     renderExpenseTally(); renderRecurringList('expenses');
+    if(typeof renderRows === 'function') renderRows();
+    if(typeof renderSummary === 'function') renderSummary();
   } else {
     renderIncomeSummary(); renderBreakdown('inc'); renderIncomeChart();
     renderIncomeTally(); renderRecurringList('incomes');
@@ -2779,7 +2870,7 @@ function renderRecurringList(collection){
     return `
       <div class="row">
         <span style="flex:1;font-size:14px;">${escapeHtml(x.desc || x.category || 'Untitled')}
-          <span style="color:var(--text-tertiary);font-size:12px;margin-left:6px;">${escapeHtml(x.category)} · ${freqLabel}</span>
+          <span style="color:var(--text-tertiary);font-size:12px;margin-left:6px;">${escapeHtml(x.category)} · ${freqLabel}${x.creditAccountId?' · pays into account':''}</span>
         </span>
         <span style="font-size:14px;font-weight:500;color:${isExp?'var(--red)':'var(--green)'};margin-right:8px;" title="${fmt(x.amount)} ${freqLabel.toLowerCase()}">${fmt(moEq)}/mo</span>
         <button class="log-btn ${logged?'done':''}" data-collection="${collection}" data-id="${x.id}">
@@ -2931,7 +3022,7 @@ document.querySelectorAll('.add-row[data-type]').forEach(btn=>{
 
 document.getElementById('addExpenseBtn').addEventListener('click', ()=>{
   const today = new Date().toISOString().slice(0,10);
-  data.expenses.push({id:uid(), date:today, category:EXPENSE_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time'});
+  data.expenses.push({id:uid(), date:today, category:EXPENSE_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time', creditAccountId:''});
   saveData(); renderExpenseAll();
 });
 
@@ -3015,6 +3106,12 @@ function fillModalCats(){
   sel.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
   const freq = document.getElementById('mFreq');
   if(freq) freq.innerHTML = FREQ_OPTIONS.map(f=>`<option value="${f.value}">${f.label}</option>`).join('');
+  const credit = document.getElementById('mCredit');
+  const wrap = document.getElementById('mCreditWrap');
+  if(wrap) wrap.style.display = modalType === 'expense' ? 'block' : 'none';
+  if(credit){
+    credit.innerHTML = '<option value="">Spend only</option>' + assetAccountOptions('');
+  }
 }
 
 document.getElementById('fabBtn').addEventListener('click', ()=> openModal());
@@ -3034,6 +3131,7 @@ document.getElementById('mSubmit').addEventListener('click', ()=>{
   const amount = Number(document.getElementById('mAmount').value)||0;
   if(!amount){ document.getElementById('mAmount').focus(); return; }
   const freqVal = (document.getElementById('mFreq') && document.getElementById('mFreq').value) || 'one-time';
+  const creditId = (document.getElementById('mCredit') && document.getElementById('mCredit').value) || '';
   const entry = {
     id: uid(),
     date: document.getElementById('mDate').value || new Date().toISOString().slice(0,10),
@@ -3041,11 +3139,15 @@ document.getElementById('mSubmit').addEventListener('click', ()=>{
     desc: document.getElementById('mDesc').value.trim(),
     amount,
     frequency: freqVal,
-    recurring: freqVal !== 'one-time'
+    recurring: freqVal !== 'one-time',
+    creditAccountId: modalType === 'expense' ? creditId : ''
   };
   if(modalType === 'expense'){
     data.expenses.push(entry);
-    saveData(); renderExpenseAll();
+    if(entry.creditAccountId){
+      creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Contribution');
+    }
+    saveData(); renderExpenseAll(); renderAll();
   } else {
     data.incomes.push(entry);
     saveData(); renderIncomeAll();
