@@ -909,6 +909,7 @@
     border-radius: var(--radius-sm); padding: 9px 10px; color: var(--text);
   }
   .wallet-connect-row .wallet-address:focus { outline: none; border-color: var(--accent); }
+  .wallet-connect-row .wallet-chain { flex-shrink: 0; width: 92px; }
   .wallet-connect-row .refresh-wallet { flex-shrink: 0; }
   .wallet-hint {
     font-size: 11px; color: var(--text-tertiary); padding: 6px 8px 2px; line-height: 1.4;
@@ -1764,7 +1765,7 @@
     <div class="settings-field">
       <label>Alchemy API key</label>
       <input type="text" id="alchemyKey" placeholder="Alchemy API key" autocomplete="off" spellcheck="false">
-      <div class="settings-hint">Needed to read Base wallet balances. Get a free key at alchemy.com — create an app on the Base network and copy its API key. Ledger only ever reads a public wallet address; it never asks for a private key or seed phrase.</div>
+      <div class="settings-hint">Needed to read Base and Solana wallet balances. Get a free key at alchemy.com. Alchemy keys often work across chains automatically — if a wallet fails to refresh, create a separate app for that specific network in your Alchemy dashboard and use its key instead. Ledger only ever reads a public wallet address; it never asks for a private key or seed phrase.</div>
     </div>
 
     <div class="settings-row">
@@ -2736,11 +2737,16 @@ function renderRows(){
         <div class="holdings-panel ${isOpen?'open':''}" id="holdings-${acc.id}">
           ${acc.category === 'Blockchain' ? `
             <div class="wallet-connect-row">
+              <select class="wallet-chain" id="wchain-${acc.id}" data-acc="${acc.id}">
+                <option value="base" ${(acc.walletChain||'base')==='base'?'selected':''}>Base</option>
+                <option value="solana" ${acc.walletChain==='solana'?'selected':''}>Solana</option>
+              </select>
               <input type="text" class="wallet-address" id="waddr-${acc.id}" data-acc="${acc.id}"
-                placeholder="0x… Base wallet address" value="${escapeHtml(acc.walletAddress||'')}" spellcheck="false" autocomplete="off">
+                placeholder="${(acc.walletChain||'base')==='solana' ? 'Solana wallet address' : '0x… Base wallet address'}"
+                value="${escapeHtml(acc.walletAddress||'')}" spellcheck="false" autocomplete="off">
               <button class="ghost refresh-wallet" data-acc="${acc.id}" type="button">Refresh wallet</button>
             </div>
-            <div class="wallet-hint">Reads your public Base address only — never asks for a private key or seed phrase.</div>
+            <div class="wallet-hint">Reads your public wallet address only — never asks for a private key or seed phrase.</div>
             <span class="quote-status" id="wstat-${acc.id}"></span>
           ` : ''}
           ${acc.holdings.map(h=> holdingRowHtml(acc.id, h)).join('')}
@@ -2814,6 +2820,16 @@ function renderRows(){
       saveData();
     });
     el.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); refreshWalletHoldings(el.dataset.acc); } });
+  });
+  document.querySelectorAll('#assetsRows .wallet-chain').forEach(el=>{
+    el.addEventListener('change', ()=>{
+      const acc = data.accounts.find(a=>a.id===el.dataset.acc);
+      if(!acc) return;
+      acc.walletChain = el.value;
+      saveData();
+      const addrInput = document.getElementById('waddr-' + acc.id);
+      if(addrInput) addrInput.placeholder = el.value === 'solana' ? 'Solana wallet address' : '0x… Base wallet address';
+    });
   });
   document.querySelectorAll('#assetsRows .add-holding').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -3014,10 +3030,10 @@ async function fetchGeckoPricesByIds(ids){
   }catch(e){ return {}; }
 }
 
-async function fetchGeckoPricesByContracts(addresses){
+async function fetchGeckoPricesByContracts(addresses, platform){
   if(!addresses.length) return {};
   try{
-    const url = 'https://api.coingecko.com/api/v3/simple/token_price/base?contract_addresses=' +
+    const url = 'https://api.coingecko.com/api/v3/simple/token_price/' + (platform || 'base') + '?contract_addresses=' +
       encodeURIComponent(addresses.join(',')) + '&vs_currencies=usd';
     const res = await fetch(url, { cache: 'no-store' });
     if(!res.ok) return {};
@@ -3025,10 +3041,11 @@ async function fetchGeckoPricesByContracts(addresses){
   }catch(e){ return {}; }
 }
 
-async function alchemyRpc(method, params){
+async function alchemyRpc(method, params, network){
   const key = getAlchemyKey();
   if(!key) throw new Error('no-key');
-  const url = 'https://base-mainnet.g.alchemy.com/v2/' + encodeURIComponent(key);
+  const host = network === 'solana' ? 'solana-mainnet.g.alchemy.com' : 'base-mainnet.g.alchemy.com';
+  const url = 'https://' + host + '/v2/' + encodeURIComponent(key);
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3050,14 +3067,14 @@ async function fetchBaseWalletHoldings(address){
   const holdings = [];
 
   // Native ETH balance
-  const weiHex = await alchemyRpc('eth_getBalance', [address, 'latest']);
+  const weiHex = await alchemyRpc('eth_getBalance', [address, 'latest'], 'base');
   const ethUnits = parseInt(weiHex, 16) / 1e18;
   if(ethUnits > 0.00001){
     holdings.push({ id: uid(), name: 'Ethereum (Base)', ticker: 'ETH', units: ethUnits, price: 0, value: 0 });
   }
 
   // ERC-20 token balances
-  const tb = await alchemyRpc('alchemy_getTokenBalances', [address]);
+  const tb = await alchemyRpc('alchemy_getTokenBalances', [address], 'base');
   let tokens = (tb && tb.tokenBalances || [])
     .filter(t => t.tokenBalance && parseInt(t.tokenBalance, 16) > 0);
 
@@ -3067,7 +3084,7 @@ async function fetchBaseWalletHoldings(address){
   tokens = tokens.slice(0, 40);
 
   const metas = await Promise.all(tokens.map(t =>
-    alchemyRpc('alchemy_getTokenMetadata', [t.contractAddress]).catch(()=>null)
+    alchemyRpc('alchemy_getTokenMetadata', [t.contractAddress], 'base').catch(()=>null)
   ));
 
   const tokenEntries = [];
@@ -3111,18 +3128,116 @@ async function fetchBaseWalletHoldings(address){
   return holdings;
 }
 
+let _jupTokenListCache = null;
+/** Jupiter's public token list maps a Solana mint address to its symbol/name.
+    Solana has no built-in on-chain equivalent of ERC-20's name()/symbol(), so
+    an off-chain list is the standard way apps resolve this. Falls back to a
+    shortened mint address if the list can't be fetched — balance/price still
+    work either way, only the display label degrades. */
+async function jupiterTokenList(){
+  if(_jupTokenListCache) return _jupTokenListCache;
+  try{
+    const res = await fetch('https://token.jup.ag/all', { cache: 'no-store' });
+    if(!res.ok) return {};
+    const list = await res.json();
+    const map = {};
+    (list||[]).forEach(t=>{ if(t.address) map[t.address] = t; });
+    _jupTokenListCache = map;
+    return map;
+  }catch(e){ return {}; }
+}
+
+/** Reads a public Solana wallet address (never a private key) and returns
+    holdings in the same {name, ticker, units, price, value} shape the
+    existing stock-holdings UI already knows how to render. */
+async function fetchSolanaWalletHoldings(address){
+  if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address||'')) throw new Error('Enter a valid Solana wallet address');
+  if(!getAlchemyKey()) throw new Error('Add a free Alchemy API key in Settings');
+
+  const holdings = [];
+
+  // Native SOL balance
+  const balResult = await alchemyRpc('getBalance', [address], 'solana');
+  const lamports = (balResult && typeof balResult === 'object') ? balResult.value : balResult;
+  const solUnits = (Number(lamports) || 0) / 1e9;
+  if(solUnits > 0.00001){
+    holdings.push({ id: uid(), name: 'Solana', ticker: 'SOL', units: solUnits, price: 0, value: 0 });
+  }
+
+  // SPL token accounts — getTokenAccountsByOwner returns decimal-adjusted
+  // amounts directly (jsonParsed), so no separate metadata call is needed
+  // just to know the balance, unlike the EVM flow.
+  const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+  const tokenResult = await alchemyRpc('getTokenAccountsByOwner', [
+    address,
+    { programId: TOKEN_PROGRAM_ID },
+    { encoding: 'jsonParsed' }
+  ], 'solana');
+
+  let accounts = (tokenResult && tokenResult.value || [])
+    .map(a => a.account && a.account.data && a.account.data.parsed && a.account.data.parsed.info)
+    .filter(info => info && info.tokenAmount && Number(info.tokenAmount.uiAmount) > 0);
+
+  accounts.sort((a,b) => Number(b.tokenAmount.uiAmount) - Number(a.tokenAmount.uiAmount));
+  accounts = accounts.slice(0, 40);
+
+  const tokenList = await jupiterTokenList();
+  const tokenEntries = accounts.map(info => {
+    const meta = tokenList[info.mint];
+    const shortMint = info.mint.slice(0,4) + '…' + info.mint.slice(-4);
+    return {
+      id: uid(),
+      mint: info.mint,
+      name: (meta && meta.name) || shortMint,
+      ticker: (meta && meta.symbol) || shortMint,
+      units: Number(info.tokenAmount.uiAmount),
+      price: 0, value: 0
+    };
+  });
+
+  const [solPriceRes, tokenPrices] = await Promise.all([
+    fetchGeckoPricesByIds(['solana']),
+    fetchGeckoPricesByContracts(tokenEntries.map(e=>e.mint), 'solana')
+  ]);
+  const solPrice = solPriceRes.solana && solPriceRes.solana.usd;
+  holdings.forEach(h=>{
+    if(h.ticker === 'SOL' && solPrice){
+      h.price = solPrice;
+      h.value = Math.round(h.units * solPrice * 100) / 100;
+    }
+  });
+  tokenEntries.forEach(e=>{
+    const entry = tokenPrices[e.mint.toLowerCase()];
+    const px = entry && entry.usd;
+    delete e.mint;
+    if(px){
+      e.price = px;
+      e.value = Math.round(e.units * px * 100) / 100;
+      holdings.push(e); // only keep tokens CoinGecko can actually price — filters out spam/dust airdrops
+    }
+  });
+
+  return holdings;
+}
+
 async function refreshWalletHoldings(accId){
   const acc = data.accounts.find(a=>a.id===accId);
   if(!acc) return;
   const addrInput = document.getElementById('waddr-' + accId);
+  const chainInput = document.getElementById('wchain-' + accId);
   let status = document.getElementById('wstat-' + accId);
   const address = (addrInput ? addrInput.value : acc.walletAddress || '').trim();
+  const chain = (chainInput ? chainInput.value : acc.walletChain) || 'base';
   acc.walletAddress = address;
+  acc.walletChain = chain;
   saveData();
 
-  if(status){ status.textContent = 'Fetching from Base…'; status.style.color = 'var(--text-tertiary)'; }
+  const chainLabel = chain === 'solana' ? 'Solana' : 'Base';
+  if(status){ status.textContent = `Fetching from ${chainLabel}…`; status.style.color = 'var(--text-tertiary)'; }
   try{
-    const holdings = await fetchBaseWalletHoldings(address);
+    const holdings = chain === 'solana'
+      ? await fetchSolanaWalletHoldings(address)
+      : await fetchBaseWalletHoldings(address);
     acc.holdings = holdings;
     acc.balance = accountBalance(acc);
     saveData();
@@ -3132,7 +3247,7 @@ async function refreshWalletHoldings(accId){
     // renderRows() rebuilt the DOM, so the earlier status reference is now detached — re-query it
     status = document.getElementById('wstat-' + accId);
     if(status){
-      status.textContent = holdings.length ? `Updated · ${holdings.length} token${holdings.length===1?'':'s'} found` : 'Wallet is empty on Base';
+      status.textContent = holdings.length ? `Updated · ${holdings.length} token${holdings.length===1?'':'s'} found` : `Wallet is empty on ${chainLabel}`;
       status.style.color = 'var(--green)';
     }
   }catch(e){
