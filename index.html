@@ -1721,7 +1721,7 @@
       <select id="mFreq"></select>
     </div>
     <div class="modal-field" id="mCreditWrap">
-      <label>Pays into account</label>
+      <label id="mCreditLabel">Pays into account</label>
       <select id="mCredit"><option value="">None</option></select>
     </div>
     <div class="modal-field" id="mDebitWrap">
@@ -2273,7 +2273,7 @@ function softDelete(collection, id, label){
   const idx = arr.findIndex(x => x.id === id);
   if(idx === -1) return;
   const item = arr[idx];
-  if(collection==='expenses'){
+  if(collection==='expenses' || collection==='incomes'){
     const amt = Number(item.amount)||0;
     const label = item.desc || item.category || 'Contribution';
     if(item.creditAccountId) creditAsset(item.creditAccountId, -amt, label);
@@ -2304,7 +2304,7 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
   if(!undoStack) return;
   const { collection, item, index } = undoStack;
   data[collection].splice(index, 0, item);
-  if(collection==='expenses'){
+  if(collection==='expenses' || collection==='incomes'){
     const amt = Number(item.amount)||0;
     const label = item.desc || item.category || 'Contribution';
     if(item.creditAccountId) creditAsset(item.creditAccountId, amt, label);
@@ -3723,14 +3723,14 @@ function onEntryFieldChange(e, collection){
   } else if(field==='frequency'){
     item.frequency = e.target.value;
     item.recurring = e.target.value !== 'one-time';
-  } else if(field==='amount' && collection==='expenses'){
+  } else if(field==='amount' && (collection==='expenses' || collection==='incomes')){
     const prev = Number(item.amount)||0;
     const delta = (Number(e.target.value)||0) - prev;
     item.amount = Number(e.target.value)||0;
     const label = item.desc || item.category || 'Contribution';
     if(item.creditAccountId && delta) creditAsset(item.creditAccountId, delta, label);
     if(item.debitAccountId && delta) creditAsset(item.debitAccountId, -delta, label);
-  } else if(field==='creditAccountId' && collection==='expenses'){
+  } else if(field==='creditAccountId' && (collection==='expenses' || collection==='incomes')){
     const prevAcc = item.creditAccountId || '';
     item.creditAccountId = e.target.value || '';
     applyExpenseCreditChange(item, item.amount, prevAcc, item.debitAccountId);
@@ -3750,6 +3750,8 @@ function onEntryFieldChange(e, collection){
   } else {
     renderIncomeSummary(); renderBreakdown('inc'); renderIncomeChart();
     renderIncomeTally(); renderRecurringList('incomes');
+    if(typeof renderRows === 'function') renderRows();
+    if(typeof renderSummary === 'function') renderSummary();
   }
   renderDashExpenses();
 }
@@ -3937,6 +3939,10 @@ function renderIncomeRows(){
       </select>
       <select class="exp-freq entry-more" data-id="${inc.id}" data-field="frequency">
         ${FREQ_OPTIONS.map(f=>`<option value="${f.value}" ${(inc.frequency||(inc.recurring?'monthly':'one-time'))===f.value?'selected':''}>${f.label}</option>`).join('')}
+      </select>
+      <select class="exp-credit entry-more" data-id="${inc.id}" data-field="creditAccountId" title="Deposits into account">
+        <option value="">Deposits into: none</option>
+        ${assetAccountOptions(inc.creditAccountId||'')}
       </select>
     `;
     wrap.appendChild(row);
@@ -4368,7 +4374,7 @@ document.getElementById('addExpenseBtn').addEventListener('click', ()=>{
 });
 
 document.getElementById('addIncomeBtn').addEventListener('click', ()=>{
-  data.incomes.push({id:uid(), date:dateForActiveMonth(), category:INCOME_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time'});
+  data.incomes.push({id:uid(), date:dateForActiveMonth(), category:INCOME_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time', creditAccountId:''});
   saveData(); renderIncomeAll();
 });
 
@@ -4450,8 +4456,10 @@ function fillModalCats(){
   const debit = document.getElementById('mDebit');
   const wrap = document.getElementById('mCreditWrap');
   const dwrap = document.getElementById('mDebitWrap');
-  if(wrap) wrap.style.display = modalType === 'expense' ? 'block' : 'none';
+  const creditLabel = document.getElementById('mCreditLabel');
+  if(wrap) wrap.style.display = 'block';
   if(dwrap) dwrap.style.display = modalType === 'expense' ? 'block' : 'none';
+  if(creditLabel) creditLabel.textContent = modalType === 'expense' ? 'Pays into account' : 'Deposits into account';
   if(credit) credit.innerHTML = '<option value="">None</option>' + assetAccountOptions('');
   if(debit) debit.innerHTML = '<option value="">None</option>' + assetAccountOptions('');
 }
@@ -4483,7 +4491,7 @@ document.getElementById('mSubmit').addEventListener('click', ()=>{
     amount,
     frequency: freqVal,
     recurring: freqVal !== 'one-time',
-    creditAccountId: modalType === 'expense' ? creditId : '',
+    creditAccountId: creditId,
     debitAccountId: modalType === 'expense' ? debitId : ''
   };
   if(modalType === 'expense'){
@@ -4493,7 +4501,8 @@ document.getElementById('mSubmit').addEventListener('click', ()=>{
     saveData(); renderExpenseAll(); renderAll();
   } else {
     data.incomes.push(entry);
-    saveData(); renderIncomeAll();
+    if(entry.creditAccountId) creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Paycheck');
+    saveData(); renderIncomeAll(); renderAll();
   }
   renderDashExpenses();
   closeModal();
