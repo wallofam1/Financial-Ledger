@@ -243,6 +243,24 @@
     margin-bottom: 16px;
   }
   .insight-line svg { flex-shrink: 0; color: var(--accent); }
+  .insight-line.warn { background: var(--red-soft); }
+  .insight-line.warn svg { color: var(--red); }
+  .insight-more-toggle {
+    display: inline-block; background: none; border: none; color: var(--text-tertiary);
+    font-family: var(--font); font-size: 12px; cursor: pointer; padding: 0;
+    margin: -10px 0 16px; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .insight-more-toggle:hover { color: var(--text-secondary); }
+  .insight-more-list {
+    display: flex; flex-direction: column; gap: 8px;
+    margin: 6px 0 16px; padding: 12px 14px;
+    background: var(--bg-input); border-radius: var(--radius-sm);
+  }
+  .insight-more-item {
+    font-size: 12.5px; color: var(--text-secondary); line-height: 1.5;
+    padding-left: 14px; position: relative;
+  }
+  .insight-more-item::before { content: '–'; position: absolute; left: 0; color: var(--text-tertiary); }
   @media (max-width: 640px) {
     .summary { grid-template-columns: 1fr; gap: 10px; }
   }
@@ -1306,6 +1324,8 @@
       <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 2l1.8 4.9L17 8.5l-4.5 2.6L11 16l-1-4.9-4.5-2.6L10.7 6.9 10 2z" fill="currentColor"/></svg>
       <span id="dashInsightText"></span>
     </div>
+    <button type="button" id="dashInsightMoreToggle" class="insight-more-toggle" style="display:none;"></button>
+    <div id="dashInsightMoreList" class="insight-more-list" style="display:none;"></div>
 
     <div class="summary">
       <div class="card net">
@@ -1563,6 +1583,11 @@
         <span class="eyebrow">What-if</span>
         <h1>Planner</h1>
       </div>
+    </div>
+
+    <div class="insight-line" id="planInsight" style="display:none;">
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 2l1.8 4.9L17 8.5l-4.5 2.6L11 16l-1-4.9-4.5-2.6L10.7 6.9 10 2z" fill="currentColor"/></svg>
+      <span id="planInsightText"></span>
     </div>
 
     <div class="summary summary-4" id="plannerSummary">
@@ -2273,6 +2298,9 @@ function renderPlanner(){
   document.getElementById('planNetFig').textContent = fmt(net);
   document.getElementById('planLeftFig').textContent = fmt(left);
 
+  const planFinding = topFindingForDomain(allFindings(), 'planner');
+  updateInsight('planInsight', 'planInsightText', planFinding ? planFinding.text : null, planFinding && planFinding.severity === 3);
+
   const wrap = document.getElementById('planPeriods');
   wrap.innerHTML = data.planner.periods.map((p, i)=>{
     const pExp = periodExpenseTotal(p);
@@ -2464,6 +2492,8 @@ function renderPlannerSummaryOnly(){
   document.getElementById('planLeftFig').textContent = fmt(left);
   const remVal = document.getElementById('planRemainingVal');
   if(remVal) remVal.textContent = fmt(left);
+  const planFinding = topFindingForDomain(allFindings(), 'planner');
+  updateInsight('planInsight', 'planInsightText', planFinding ? planFinding.text : null, planFinding && planFinding.severity === 3);
 }
 
 function bindPlannerInputs(){
@@ -3343,7 +3373,8 @@ function renderExpenseSummary(){
   document.getElementById('expTopCat').textContent = top ? top[0] : '—';
   const labEl = document.querySelector('#sub-expenses .summary .card .label');
   if(labEl) labEl.textContent = monthLabel(activeMonthKey());
-  updateInsight('expInsight', 'expInsightText', computeExpInsight());
+  const cfFinding = topFindingForDomain(allFindings(), 'cashflow');
+  updateInsight('expInsight', 'expInsightText', cfFinding ? cfFinding.text : null, cfFinding && cfFinding.severity === 3);
 }
 
 function renderExpenseTally(){
@@ -3550,19 +3581,34 @@ function renderIncomeAll(){
   renderRecurringList('incomes');
 }
 
-/* Earned insights — one plain-language sentence surfaced from data already on hand */
+/* ============ Unified Findings Engine ============ */
+/* One engine reasons across net worth, cash flow, and planner together.
+   Each finding: { id, domain: 'networth'|'cashflow'|'planner', severity: 1(info)-3(urgent), text } */
 function monthCollectionTotal(collection, mk){
   return (data[collection]||[]).filter(x=>monthKeyOf(x.date)===mk).reduce((s,x)=>s+(Number(x.amount)||0),0);
 }
-function updateInsight(boxId, textId, text){
-  const box = document.getElementById(boxId);
-  const span = document.getElementById(textId);
-  if(!box || !span) return;
-  if(!text){ box.style.display = 'none'; return; }
-  if(span.textContent !== text) span.textContent = text;
-  box.style.display = 'flex';
+
+function findingNetWorthDriver(){
+  if(!data.history || !data.history.length) return null;
+  const prev = data.history[data.history.length-1];
+  const t = totals();
+  const assetsDelta = t.assets - (Number(prev.totalAssets)||0);
+  const liabDelta = t.liabilities - (Number(prev.totalLiabilities)||0);
+  const netDelta = t.net - (Number(prev.netWorth)||0);
+  if(Math.abs(netDelta) < 1) return null;
+  const assetContribution = assetsDelta;
+  const liabContribution = -liabDelta;
+  const driverText = Math.abs(assetContribution) >= Math.abs(liabContribution)
+    ? (assetContribution >= 0 ? 'growing assets' : 'shrinking assets')
+    : (liabContribution >= 0 ? 'paying down debt' : 'growing liabilities');
+  const dir = netDelta >= 0 ? 'up' : 'down';
+  return {
+    id: 'networth-driver', domain: 'networth', severity: 1,
+    text: `Net worth is ${dir} ${fmt(Math.abs(netDelta))} since your last snapshot, mainly from ${driverText}.`
+  };
 }
-function computeDashInsight(){
+
+function findingCashFlowPace(){
   const cur = currentMonthKey();
   const prevKey = shiftMonthKey(cur, -1);
   const curExp = monthCollectionTotal('expenses', cur);
@@ -3573,11 +3619,17 @@ function computeDashInsight(){
   const curNet = curInc - curExp;
   const prevNet = prevInc - prevExp;
   const diff = curNet - prevNet;
-  if(Math.abs(diff) < 1) return `Cash flow this month is tracking about the same as last month.`;
+  if(Math.abs(diff) < 1){
+    return { id:'cashflow-pace', domain:'cashflow', severity:1, text:'Cash flow this month is tracking about the same as last month.' };
+  }
   const word = diff >= 0 ? 'ahead of' : 'behind';
-  return `This month's cash flow is ${fmt(Math.abs(diff))} ${word} last month's pace so far.`;
+  return {
+    id: 'cashflow-pace', domain: 'cashflow', severity: diff >= 0 ? 1 : 2,
+    text: `This month's cash flow is ${fmt(Math.abs(diff))} ${word} last month's pace so far.`
+  };
 }
-function computeExpInsight(){
+
+function findingCategoryAnomaly(){
   const mk = activeMonthKey();
   const monthExp = data.expenses.filter(x=>monthKeyOf(x.date)===mk);
   if(!monthExp.length) return null;
@@ -3590,14 +3642,152 @@ function computeExpInsight(){
     const pExp = data.expenses.filter(x=>monthKeyOf(x.date)===pk && ((x.category||'Uncategorized').trim())===cat);
     if(pExp.length){ sum += pExp.reduce((s,x)=>s+(Number(x.amount)||0),0); count++; }
   }
-  if(count < 1 || sum/count < 0.5) return `${cat} is your top category this month at ${fmt(amt)}.`;
+  if(count < 1 || sum/count < 0.5){
+    return { id:'category-top', domain:'cashflow', severity:1, text:`${cat} is your top category this month at ${fmt(amt)}.` };
+  }
   const avg = sum / count;
   const diff = amt - avg;
   const pct = Math.round((diff/avg)*100);
-  if(Math.abs(pct) < 5) return `${cat} spending is in line with your recent average (${fmt(amt)}).`;
+  if(Math.abs(pct) < 5){
+    return { id:'category-avg', domain:'cashflow', severity:1, text:`${cat} spending is in line with your recent average (${fmt(amt)}).` };
+  }
   const word = pct >= 0 ? 'more' : 'less';
-  return `${cat}: ${fmt(amt)} this month, ${Math.abs(pct)}% ${word} than your recent average of ${fmt(avg)}.`;
+  return {
+    id: 'category-anomaly', domain: 'cashflow', severity: pct >= 25 ? 3 : 2,
+    text: `${cat}: ${fmt(amt)} this month, ${Math.abs(pct)}% ${word} than your recent average of ${fmt(avg)}.`
+  };
 }
+
+function findingPlannerShortfall(){
+  ensurePlanner();
+  const periods = data.planner.periods;
+  for(let i=0;i<periods.length;i++){
+    const p = periods[i];
+    const pExp = periodExpenseTotal(p);
+    const pNet = (Number(p.income)||0) - pExp;
+    if((Number(p.income)||0) > 0 && pNet < 0){
+      const dueIds = new Set(p.dueIds||[]);
+      const dueItems = recurringItems('expenses').filter(x=>dueIds.has(x.id));
+      const extraItems = p.expenses||[];
+      const allItems = [
+        ...dueItems.map(x=>({desc:x.desc||x.category||'Bill', amount:Number(x.amount)||0})),
+        ...extraItems.map(x=>({desc:x.desc||'Expense', amount:Number(x.amount)||0}))
+      ].sort((a,b)=>b.amount-a.amount);
+      const biggest = allItems[0];
+      const label = p.title && p.title.trim() ? p.title.trim() : 'Period ' + (i+1);
+      const driverText = biggest ? ` — ${biggest.desc} (${fmt(biggest.amount)}) is the biggest piece.` : '';
+      return {
+        id: 'planner-shortfall-' + i, domain: 'planner', severity: 3,
+        text: `${label} is projected to run ${fmt(Math.abs(pNet))} short.${driverText}`
+      };
+    }
+  }
+  return null;
+}
+
+function findingPlannerProjection(){
+  ensurePlanner();
+  const gross = plannerGross();
+  const net = plannerNet();
+  if(gross < 1 || net <= 0) return null;
+  return {
+    id: 'planner-projection', domain: 'planner', severity: 1,
+    text: `At this pace, your next four paychecks add about ${fmt(net)} toward net worth.`
+  };
+}
+
+/** All current findings, ranked most-important first. */
+function allFindings(){
+  return [
+    findingPlannerShortfall(),
+    findingCategoryAnomaly(),
+    findingCashFlowPace(),
+    findingPlannerProjection(),
+    findingNetWorthDriver()
+  ].filter(Boolean).sort((a,b)=> b.severity - a.severity);
+}
+
+/* ---- Freshness memory: avoid repeating the same non-urgent finding
+   verbatim day after day once something else is available to say.
+   Urgent (severity 3) findings are exempt — they should keep surfacing
+   until the underlying problem is actually resolved. ---- */
+function ensureFindingsMemory(){
+  if(!data.findingsMemory || typeof data.findingsMemory !== 'object') data.findingsMemory = {};
+}
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+function pickBest(findings){
+  if(!findings.length) return null;
+  ensureFindingsMemory();
+  const today = todayStr();
+  let chosen = null;
+  for(const f of findings){
+    if(f.severity >= 3){ chosen = f; break; }
+    const seen = data.findingsMemory[f.id];
+    const stale = seen && seen.date < today && seen.text === f.text;
+    if(!stale){ chosen = f; break; }
+  }
+  if(!chosen) chosen = findings[0]; // everything was stale — better to repeat than show nothing
+  const prev = data.findingsMemory[chosen.id];
+  const changed = !prev || prev.date !== today || prev.text !== chosen.text;
+  data.findingsMemory[chosen.id] = { date: today, text: chosen.text };
+  if(changed) saveData();
+  return chosen;
+}
+
+function pruneFindingsMemory(findings){
+  ensureFindingsMemory();
+  const liveIds = new Set(findings.map(f=>f.id));
+  let changed = false;
+  Object.keys(data.findingsMemory).forEach(id=>{
+    if(!liveIds.has(id)){ delete data.findingsMemory[id]; changed = true; }
+  });
+  if(changed) saveData();
+}
+
+function topFindingForDomain(findings, domain){
+  return pickBest(findings.filter(f=>f.domain===domain));
+}
+
+function updateInsight(boxId, textId, text, warn){
+  const box = document.getElementById(boxId);
+  const span = document.getElementById(textId);
+  if(!box || !span) return;
+  if(!text){ box.style.display = 'none'; return; }
+  if(span.textContent !== text) span.textContent = text;
+  box.style.display = 'flex';
+  box.classList.toggle('warn', !!warn);
+}
+
+/** Renders the Dashboard headline finding + a collapsed list of everything else. */
+function renderDashFindings(){
+  const findings = allFindings();
+  pruneFindingsMemory(findings);
+  const head = pickBest(findings);
+  updateInsight('dashInsight', 'dashInsightText', head ? head.text : null, head && head.severity === 3);
+
+  const rest = head ? findings.filter(f=>f.id !== head.id) : [];
+  const toggle = document.getElementById('dashInsightMoreToggle');
+  const list = document.getElementById('dashInsightMoreList');
+  if(!toggle || !list) return;
+  if(!rest.length){
+    toggle.style.display = 'none';
+    list.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+  toggle.style.display = 'inline-block';
+  const wasOpen = list.style.display === 'flex';
+  toggle.textContent = wasOpen ? 'Hide details' : `+${rest.length} other thing${rest.length>1?'s':''} worth knowing`;
+  list.innerHTML = rest.map(f=>`<div class="insight-more-item">${escapeHtml(f.text)}</div>`).join('');
+  list.style.display = wasOpen ? 'flex' : 'none';
+  toggle.onclick = () => {
+    const open = list.style.display === 'flex';
+    list.style.display = open ? 'none' : 'flex';
+    toggle.textContent = open ? `+${rest.length} other thing${rest.length>1?'s':''} worth knowing` : 'Hide details';
+  };
+}
+
 
 /* Dashboard */
 function renderDashExpenses(){
@@ -3618,7 +3808,7 @@ function renderDashExpenses(){
   const top = categoryTotals(monthExp)[0];
   document.getElementById('dashExpTop').textContent = top ? top[0] : '—';
 
-  updateInsight('dashInsight', 'dashInsightText', computeDashInsight());
+  renderDashFindings();
 
   const allRec = [
     ...recurringItems('expenses').map(x=>({...x, _type:'exp'})),
