@@ -21,15 +21,15 @@
     --text-tertiary: #636366;
     --accent: #0a84ff;
     --accent-soft: rgba(10,132,255,0.15);
-    --green: #8a9490;
-    --green-soft: rgba(138,148,144,0.12);
-    --red: #9a8e8c;
-    --red-soft: rgba(154,142,140,0.12);
+    --green: #30d158;
+    --green-soft: rgba(48,209,88,0.14);
+    --red: #ff453a;
+    --red-soft: rgba(255,69,58,0.14);
     --orange: #ff9f0a;
     --radius: 12px;
     --radius-sm: 8px;
     --radius-lg: 16px;
-    --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    --shadow: 0 8px 24px rgba(0,0,0,0.28), 0 1px 2px rgba(0,0,0,0.3);
     --nav-h: 52px;
     --bottom-nav-h: 64px;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -49,14 +49,25 @@
     --text-tertiary: #86868b;
     --accent: #0071e3;
     --accent-soft: rgba(0,113,227,0.1);
-    --green: #6b7370;
-    --green-soft: rgba(107,115,112,0.1);
-    --red: #7a6e6c;
-    --red-soft: rgba(122,110,108,0.1);
+    --green: #28a745;
+    --green-soft: rgba(40,167,69,0.1);
+    --red: #e0342a;
+    --red-soft: rgba(224,52,42,0.1);
     --orange: #ff9500;
-    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow: 0 8px 24px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
   }
 
+  select {
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6' fill='none'><path d='M1 1L5 5L9 1' stroke='%23888890' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 9px 6px;
+    padding-right: 26px !important;
+  }
+  .figure, .delta, input.balance, input.exp-amount, input.h-price, input.h-units,
+  .hf-val, .ename b, input.original, input.rate, .stat-val, .row input.balance,
+  .card .figure { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
   html, body { overflow-x: hidden; max-width: 100vw; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -154,7 +165,12 @@
     -webkit-tap-highlight-color: transparent;
   }
   .bnav-btn.active { color: var(--accent); }
-  .bnav-btn .ico { font-size: 20px; line-height: 1; }
+  .bnav-btn .ico {
+    display: flex; align-items: center; justify-content: center; line-height: 1;
+    padding: 5px 14px; border-radius: 10px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .bnav-btn.active .ico { background: var(--accent-soft); }
   @media (max-width: 640px) {
     .bottomnav { display: block; }
   }
@@ -177,23 +193,34 @@
     font-weight: 600; font-size: 28px; letter-spacing: -0.03em;
     margin: 0; color: var(--text);
   }
+  /* Dashboard is home base — sub-tools step down slightly in weight/size */
+  #panel-accounts .panel-header h1,
+  #panel-cashflow .panel-header h1,
+  #panel-planner .panel-header h1 {
+    font-size: 24px; font-weight: 550;
+  }
 
   /* Cards */
   .card {
     background: var(--bg-card);
-    border: 1px solid var(--border);
+    border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
     border-radius: var(--radius);
     padding: 20px;
     box-shadow: var(--shadow);
   }
   .card .label {
     font-size: 12px; font-weight: 500; letter-spacing: 0.02em;
-    color: var(--text-secondary); margin-bottom: 6px;
+    color: var(--text-secondary); margin-bottom: 14px;
   }
   .card .figure {
     font-size: 28px; font-weight: 600; letter-spacing: -0.03em;
     line-height: 1.15; color: var(--text);
   }
+  @keyframes figurePulse {
+    0% { opacity: 0.45; transform: translateY(-3px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .figure-pulse { animation: figurePulse 220ms ease; }
   .card.net .figure { font-size: 32px; }
   .card .delta {
     font-size: 13px; font-weight: 500; margin-top: 8px;
@@ -208,6 +235,14 @@
     display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px;
     margin-bottom: 20px;
   }
+  .insight-line {
+    display: flex; align-items: center; gap: 9px;
+    background: var(--accent-soft); color: var(--text);
+    border-radius: var(--radius-sm); padding: 11px 14px;
+    font-size: 13px; font-weight: 450; line-height: 1.4;
+    margin-bottom: 16px;
+  }
+  .insight-line svg { flex-shrink: 0; color: var(--accent); }
   @media (max-width: 640px) {
     .summary { grid-template-columns: 1fr; gap: 10px; }
   }
@@ -217,7 +252,7 @@
 
   .chart-card, .section {
     background: var(--bg-card);
-    border: 1px solid var(--border);
+    border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
     border-radius: var(--radius);
     padding: 20px;
     margin-bottom: 16px;
@@ -232,7 +267,8 @@
   }
   .chart-wrap { height: 220px; width: 100%; max-width: 100%; overflow: hidden; }
   .empty-note {
-    color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 40px 0;
+    color: var(--text-secondary); font-size: 13.5px; font-weight: 450; text-align: center; padding: 40px 0;
+    line-height: 1.5; letter-spacing: -0.005em;
   }
 
   .ledger-cols {
@@ -267,6 +303,8 @@
   .row input.balance:focus, select.cat:focus {
     outline: none; border-color: var(--accent);
   }
+  /* Prevent select/input intrinsic content width from overflowing the row in narrow columns */
+  .row input.name, .row select.cat, .row input.balance { min-width: 0; }
   .row .del, .entry-row .del {
     background: none; border: none; color: var(--text-tertiary);
     cursor: pointer; font-size: 16px; padding: 8px 10px; line-height: 1;
@@ -353,6 +391,9 @@
     .card { padding: 12px; }
     .panel-header { margin-bottom: 14px; }
     .panel-header h1 { font-size: 26px; }
+    #panel-accounts .panel-header h1,
+    #panel-cashflow .panel-header h1,
+    #panel-planner .panel-header h1 { font-size: 22px; }
 
     /* ---- Cash Flow entries ---- */
     .entry-row {
@@ -596,11 +637,16 @@
     background: var(--accent); color: #fff; border: none;
     font-size: 26px; font-weight: 400; line-height: 1;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 45%, transparent),
+                0 2px 6px rgba(0,0,0,0.2);
     display: flex; align-items: center; justify-content: center;
-    transition: transform 0.15s, opacity 0.15s;
+    transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s;
   }
-  .fab:hover { opacity: 0.9; transform: scale(1.04); }
+  .fab:hover {
+    opacity: 0.94; transform: scale(1.04);
+    box-shadow: 0 8px 26px color-mix(in srgb, var(--accent) 55%, transparent),
+                0 3px 8px rgba(0,0,0,0.22);
+  }
   @media (min-width: 641px) {
     .fab { bottom: 28px; right: 28px; }
   }
@@ -772,6 +818,7 @@
     background: none; border: none; color: var(--text-tertiary);
     cursor: pointer; font-size: 12px; padding: 6px 8px;
     min-width: 28px; min-height: 28px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
     transition: color 0.15s, background 0.15s;
   }
   .expand-btn:hover { color: var(--text); background: var(--bg-input); }
@@ -990,6 +1037,15 @@
   @media (max-width: 820px) {
     .planner-periods { grid-template-columns: 1fr; }
   }
+  .period-card {
+    position: relative;
+    overflow: hidden;
+  }
+  .period-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 35%, transparent));
+  }
   .period-card h2 {
     display: flex;
     justify-content: space-between;
@@ -1156,6 +1212,7 @@
     background: none; border: none; color: var(--text-tertiary);
     cursor: pointer; font-size: 16px; min-width: 28px; min-height: 28px;
     border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
   }
   .entry-row .more-btn:hover, .entry-row.open-more .more-btn { color: var(--text); background: var(--bg-input); }
 
@@ -1212,9 +1269,9 @@
         <span id="syncLabel">Local</span>
       </span>
       <span class="as-of" id="asOf">—</span>
-      <button class="icon-btn" id="settingsBtn" title="Settings & sync" aria-label="Settings">⚙</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings & sync" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" stroke="currentColor" stroke-width="1.4"/><path d="M16.4 12.2c.1-.4.15-.8.15-1.2s-.05-.8-.15-1.2l1.6-1.2-1.5-2.6-1.9.6a5.9 5.9 0 00-2-1.2L12.2 3H8.8l-.4 2.4a5.9 5.9 0 00-2 1.2l-1.9-.6-1.5 2.6 1.6 1.2c-.1.4-.15.8-.15 1.2s.05.8.15 1.2l-1.6 1.2 1.5 2.6 1.9-.6a5.9 5.9 0 002 1.2l.4 2.4h3.4l.4-2.4a5.9 5.9 0 002-1.2l1.9.6 1.5-2.6-1.6-1.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
       <button class="theme-toggle" id="themeToggle" title="Toggle theme" aria-label="Toggle dark/light mode">
-        <span id="themeIcon">◐</span>
+        <span id="themeIcon"><svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 108 8 6.5 6.5 0 01-8-8z"/></svg></span>
       </button>
     </div>
   </div>
@@ -1223,17 +1280,17 @@
 <!-- Bottom Nav (mobile) -->
 <nav class="bottomnav">
   <div class="bottomnav-inner">
-    <button class="bnav-btn active" data-tab="dashboard"><span class="ico">◈</span>Dashboard</button>
-    <button class="bnav-btn" data-tab="accounts"><span class="ico">☰</span>Accounts</button>
-    <button class="bnav-btn" data-tab="cashflow"><span class="ico">⇄</span>Cash Flow</button>
-    <button class="bnav-btn" data-tab="planner"><span class="ico">◫</span>Planner</button>
+    <button class="bnav-btn active" data-tab="dashboard"><span class="ico"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="11" y="2.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="2.5" y="11" width="6.5" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="11" y="11" width="6.5" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.4"/></svg></span>Dashboard</button>
+    <button class="bnav-btn" data-tab="accounts"><span class="ico"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="3.5" width="15" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 8h15" stroke="currentColor" stroke-width="1.4"/><path d="M6 11.5h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>Accounts</button>
+    <button class="bnav-btn" data-tab="cashflow"><span class="ico"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M3 7h11.5M14.5 7L11 3.5M14.5 7L11 10.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 13H5.5M5.5 13L9 9.5M5.5 13L9 16.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Cash Flow</button>
+    <button class="bnav-btn" data-tab="planner"><span class="ico"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="3" width="15" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 7.5h15" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 2v3M13.5 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>Planner</button>
   </div>
 </nav>
 
 <div class="wrap">
   <div class="mobile-topbar">
-    <button class="theme-toggle" id="themeToggleMobile" title="Toggle theme" type="button"><span>◐</span></button>
-    <button class="icon-btn" id="mobileHeaderSettings" title="Settings" type="button">⚙</button>
+    <button class="theme-toggle" id="themeToggleMobile" title="Toggle theme" type="button"><span><svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 108 8 6.5 6.5 0 01-8-8z"/></svg></span></button>
+    <button class="icon-btn" id="mobileHeaderSettings" title="Settings" type="button"><svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" stroke="currentColor" stroke-width="1.4"/><path d="M16.4 12.2c.1-.4.15-.8.15-1.2s-.05-.8-.15-1.2l1.6-1.2-1.5-2.6-1.9.6a5.9 5.9 0 00-2-1.2L12.2 3H8.8l-.4 2.4a5.9 5.9 0 00-2 1.2l-1.9-.6-1.5 2.6 1.6 1.2c-.1.4-.15.8-.15 1.2s.05.8.15 1.2l-1.6 1.2 1.5 2.6 1.9-.6a5.9 5.9 0 002 1.2l.4 2.4h3.4l.4-2.4a5.9 5.9 0 002-1.2l1.9.6 1.5-2.6-1.6-1.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
   </div>
 
   <!-- ========== DASHBOARD ========== -->
@@ -1243,6 +1300,11 @@
         <span class="eyebrow">Overview</span>
         <h1>Dashboard</h1>
       </div>
+    </div>
+
+    <div class="insight-line" id="dashInsight" style="display:none;">
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 2l1.8 4.9L17 8.5l-4.5 2.6L11 16l-1-4.9-4.5-2.6L10.7 6.9 10 2z" fill="currentColor"/></svg>
+      <span id="dashInsightText"></span>
     </div>
 
     <div class="summary">
@@ -1396,6 +1458,10 @@
 
     <!-- Expenses subpanel -->
     <div class="subpanel active" id="sub-expenses">
+      <div class="insight-line" id="expInsight" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 2l1.8 4.9L17 8.5l-4.5 2.6L11 16l-1-4.9-4.5-2.6L10.7 6.9 10 2z" fill="currentColor"/></svg>
+        <span id="expInsightText"></span>
+      </div>
       <div class="summary summary-4">
         <div class="card expense">
           <div class="label">This Month</div>
@@ -1489,8 +1555,6 @@
     </div>
   </div>
 
-</div>
-
 
   <!-- ========== PLANNER ========== -->
   <div class="panel" id="panel-planner" role="tabpanel">
@@ -1541,9 +1605,9 @@
   </div>
 
 <footer>Local-first · Optional cloud sync · Press <kbd>N</kbd> for quick add</footer>
+</div>
 
-
-<button class="icon-btn mobile-settings" id="mobileSettingsBtn" title="Settings">⚙</button>
+<button class="icon-btn mobile-settings" id="mobileSettingsBtn" title="Settings"><svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" stroke="currentColor" stroke-width="1.4"/><path d="M16.4 12.2c.1-.4.15-.8.15-1.2s-.05-.8-.15-1.2l1.6-1.2-1.5-2.6-1.9.6a5.9 5.9 0 00-2-1.2L12.2 3H8.8l-.4 2.4a5.9 5.9 0 00-2 1.2l-1.9-.6-1.5 2.6 1.6 1.2c-.1.4-.15.8-.15 1.2s.05.8.15 1.2l-1.6 1.2 1.5 2.6 1.9-.6a5.9 5.9 0 002 1.2l.4 2.4h3.4l.4-2.4a5.9 5.9 0 002-1.2l1.9.6 1.5-2.6-1.6-1.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
 
 <!-- FAB -->
 <button class="fab" id="fabBtn" title="Quick add (N)">+</button>
@@ -1659,6 +1723,12 @@ alter publication supabase_realtime add table ledger_data;</div>
 </div>
 
 <script>
+const ICON_X = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const ICON_CHEVRON_RIGHT = '<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M3 1L7 5L3 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_CHEVRON_DOWN = '<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1 3L5 7L9 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_MORE = '<svg width="15" height="4" viewBox="0 0 16 4" fill="currentColor"><circle cx="2" cy="2" r="1.6"/><circle cx="8" cy="2" r="1.6"/><circle cx="14" cy="2" r="1.6"/></svg>';
+const ICON_SUN = '<svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 1.5v2M10 16.5v2M18.5 10h-2M3.5 10h-2M15.6 4.4l-1.4 1.4M5.8 14.2l-1.4 1.4M15.6 15.6l-1.4-1.4M5.8 5.8L4.4 4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const ICON_MOON = '<svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 108 8 6.5 6.5 0 01-8-8z"/></svg>';
 const STORAGE_KEY = 'ledger-networth-v1';
 const THEME_KEY = 'ledger-theme';
 const SYNC_CFG_KEY = 'ledger-sync-cfg';
@@ -1941,6 +2011,16 @@ function flashSaved(){
   flashSaved._t = setTimeout(()=>el.classList.remove('show'), 1200);
 }
 
+/* Briefly pulse a figure when its value actually changes, so updates feel alive */
+function setFigureText(el, text){
+  if(!el) return;
+  if(el.textContent === text) return;
+  el.textContent = text;
+  el.classList.remove('figure-pulse');
+  void el.offsetWidth;
+  el.classList.add('figure-pulse');
+}
+
 function fmt(n){
   const num = Number(n) || 0;
   const sign = num < 0 ? '-' : '';
@@ -2033,7 +2113,7 @@ function applyTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem(THEME_KEY, theme);
   const icon = document.getElementById('themeIcon');
-  if(icon) icon.textContent = theme === 'dark' ? '◐' : '◑';
+  if(icon) icon.innerHTML = theme === 'dark' ? ICON_MOON : ICON_SUN;
   // re-render charts only after they have been initialized
   try {
     if(typeof chart !== 'undefined' && typeof renderChart === 'function') renderChart();
@@ -2212,7 +2292,7 @@ function renderPlanner(){
       <div class="period-exp-row">
         <input type="text" data-pi="${i}" data-eid="${e.id}" data-field="desc" value="${escapeHtml(e.desc||'')}" placeholder="Expense description">
         <input type="number" data-pi="${i}" data-eid="${e.id}" data-field="amount" value="${e.amount||''}" step="any" placeholder="0">
-        <button type="button" class="del" data-pi="${i}" data-eid="${e.id}" title="Remove">✕</button>
+        <button type="button" class="del" data-pi="${i}" data-eid="${e.id}" title="Remove">${ICON_X}</button>
       </div>
     `).join('') || '<div class="empty-note" style="padding:8px 0;text-align:left;">No expenses for this check yet.</div>';
 
@@ -2503,13 +2583,13 @@ function renderRows(){
       block.className = 'account-block';
       block.innerHTML = `
         <div class="row">
-          <button class="expand-btn ${isOpen?'open':''}" data-id="${acc.id}" title="Holdings">${isOpen?'▼':'▶'}</button>
+          <button class="expand-btn ${isOpen?'open':''}" data-id="${acc.id}" title="Holdings">${isOpen?ICON_CHEVRON_DOWN:ICON_CHEVRON_RIGHT}</button>
           <input class="name" value="${escapeHtml(acc.name)}" data-id="${acc.id}" data-field="name">
           <select class="cat" data-id="${acc.id}" data-field="category">
             ${ASSET_CATS.map(c=>`<option value="${c}" ${c===acc.category?'selected':''}>${c}</option>`).join('')}
           </select>
           <input class="balance" type="number" value="${bal}" data-id="${acc.id}" data-field="balance" ${acc.holdings.length?'readonly title="Sum of holdings"':''}>
-          <button class="del" data-id="${acc.id}" title="Remove">✕</button>
+          <button class="del" data-id="${acc.id}" title="Remove">${ICON_X}</button>
         </div>
         <div class="holdings-panel ${isOpen?'open':''}" id="holdings-${acc.id}">
           ${acc.holdings.map(h=> holdingRowHtml(acc.id, h)).join('')}
@@ -2540,7 +2620,7 @@ function renderRows(){
             <input type="number" value="${acc.interestRate ?? ''}" data-id="${acc.id}" data-field="interestRate" placeholder="Rate" step="0.01" title="Interest rate %">
             <span class="rate-suffix">%</span>
           </div>
-          <button class="del" data-id="${acc.id}" title="Remove">✕</button>
+          <button class="del" data-id="${acc.id}" title="Remove">${ICON_X}</button>
         </div>
       `;
       lWrap.appendChild(block);
@@ -2848,7 +2928,7 @@ function holdingRowHtml(accId, h){
         <input class="h-units" type="number" value="${h.units||0}" placeholder="Shares" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="units">
         <input class="h-price" type="number" value="${px}" placeholder="Price" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="price" title="Last price">
         <input class="h-value" type="number" value="${h.value||0}" placeholder="Value" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="value">
-        <button class="del" data-acc="${accId}" data-hid="${h.id}" title="Remove">✕</button>
+        <button class="del" data-acc="${accId}" data-hid="${h.id}" title="Remove">${ICON_X}</button>
       </div>
     </div>
   `;
@@ -2945,12 +3025,12 @@ function onFieldChange(e){
 
 function renderSummary(){
   const t = totals();
-  document.getElementById('assetsFig').textContent = fmt(t.assets);
-  document.getElementById('liabFig').textContent = fmt(t.liabilities);
-  document.getElementById('netWorthFig').textContent = fmt(t.net);
-  document.getElementById('accAssetsFig').textContent = fmt(t.assets);
-  document.getElementById('accLiabFig').textContent = fmt(t.liabilities);
-  document.getElementById('accNetWorthFig').textContent = fmt(t.net);
+  setFigureText(document.getElementById('assetsFig'), fmt(t.assets));
+  setFigureText(document.getElementById('liabFig'), fmt(t.liabilities));
+  setFigureText(document.getElementById('netWorthFig'), fmt(t.net));
+  setFigureText(document.getElementById('accAssetsFig'), fmt(t.assets));
+  setFigureText(document.getElementById('accLiabFig'), fmt(t.liabilities));
+  setFigureText(document.getElementById('accNetWorthFig'), fmt(t.net));
 
   const deltaText = (()=>{
     if(!data.history.length) return {text:'', cls:'delta'};
@@ -3171,8 +3251,8 @@ function renderExpenseRows(){
       <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(exp.desc)}" data-id="${exp.id}" data-field="desc">
       <input class="exp-date" type="date" value="${exp.date}" data-id="${exp.id}" data-field="date">
       <input class="exp-amount" type="number" value="${exp.amount}" data-id="${exp.id}" data-field="amount">
-      <button type="button" class="more-btn" title="More">···</button>
-      <button class="del" data-id="${exp.id}" title="Remove">✕</button>
+      <button type="button" class="more-btn" title="More">${ICON_MORE}</button>
+      <button class="del" data-id="${exp.id}" title="Remove">${ICON_X}</button>
       <select class="exp-cat entry-more" data-id="${exp.id}" data-field="category">
         ${EXPENSE_CATS.map(c=>`<option value="${c}" ${c===exp.category?'selected':''}>${c}</option>`).join('')}
       </select>
@@ -3256,13 +3336,14 @@ function onEntryFieldChange(e, collection){
 function renderExpenseSummary(){
   const monthExp = currentMonthExpenses();
   const total = monthExp.reduce((s,x)=>s+(Number(x.amount)||0),0);
-  document.getElementById('expMonthFig').textContent = fmt(total);
-  document.getElementById('expCount').textContent = monthExp.length;
-  document.getElementById('expRecurringFig').textContent = fmt(recurringMonthlyTotal('expenses'));
+  setFigureText(document.getElementById('expMonthFig'), fmt(total));
+  setFigureText(document.getElementById('expCount'), String(monthExp.length));
+  setFigureText(document.getElementById('expRecurringFig'), fmt(recurringMonthlyTotal('expenses')));
   const top = categoryTotals(monthExp)[0];
   document.getElementById('expTopCat').textContent = top ? top[0] : '—';
   const labEl = document.querySelector('#sub-expenses .summary .card .label');
   if(labEl) labEl.textContent = monthLabel(activeMonthKey());
+  updateInsight('expInsight', 'expInsightText', computeExpInsight());
 }
 
 function renderExpenseTally(){
@@ -3427,8 +3508,8 @@ function renderIncomeRows(){
       <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(inc.desc)}" data-id="${inc.id}" data-field="desc">
       <input class="exp-date" type="date" value="${inc.date}" data-id="${inc.id}" data-field="date">
       <input class="exp-amount" type="number" value="${inc.amount}" data-id="${inc.id}" data-field="amount">
-      <button type="button" class="more-btn" title="More">···</button>
-      <button class="del" data-id="${inc.id}" title="Remove">✕</button>
+      <button type="button" class="more-btn" title="More">${ICON_MORE}</button>
+      <button class="del" data-id="${inc.id}" title="Remove">${ICON_X}</button>
       <select class="exp-cat entry-more" data-id="${inc.id}" data-field="category">
         ${INCOME_CATS.map(c=>`<option value="${c}" ${c===inc.category?'selected':''}>${c}</option>`).join('')}
       </select>
@@ -3444,9 +3525,9 @@ function renderIncomeRows(){
 function renderIncomeSummary(){
   const monthInc = currentMonthIncomes();
   const total = monthInc.reduce((s,x)=>s+(Number(x.amount)||0),0);
-  document.getElementById('incMonthFig').textContent = fmt(total);
-  document.getElementById('incCount').textContent = monthInc.length;
-  document.getElementById('incRecurringFig').textContent = fmt(recurringMonthlyTotal('incomes'));
+  setFigureText(document.getElementById('incMonthFig'), fmt(total));
+  setFigureText(document.getElementById('incCount'), String(monthInc.length));
+  setFigureText(document.getElementById('incRecurringFig'), fmt(recurringMonthlyTotal('incomes')));
   const top = categoryTotals(monthInc)[0];
   document.getElementById('incTopCat').textContent = top ? top[0] : '—';
   const labEl = document.querySelector('#sub-income .card.income .label, #sub-income .card .label');
@@ -3469,6 +3550,55 @@ function renderIncomeAll(){
   renderRecurringList('incomes');
 }
 
+/* Earned insights — one plain-language sentence surfaced from data already on hand */
+function monthCollectionTotal(collection, mk){
+  return (data[collection]||[]).filter(x=>monthKeyOf(x.date)===mk).reduce((s,x)=>s+(Number(x.amount)||0),0);
+}
+function updateInsight(boxId, textId, text){
+  const box = document.getElementById(boxId);
+  const span = document.getElementById(textId);
+  if(!box || !span) return;
+  if(!text){ box.style.display = 'none'; return; }
+  if(span.textContent !== text) span.textContent = text;
+  box.style.display = 'flex';
+}
+function computeDashInsight(){
+  const cur = currentMonthKey();
+  const prevKey = shiftMonthKey(cur, -1);
+  const curExp = monthCollectionTotal('expenses', cur);
+  const prevExp = monthCollectionTotal('expenses', prevKey);
+  const curInc = monthCollectionTotal('incomes', cur);
+  const prevInc = monthCollectionTotal('incomes', prevKey);
+  if(!prevExp && !prevInc) return null;
+  const curNet = curInc - curExp;
+  const prevNet = prevInc - prevExp;
+  const diff = curNet - prevNet;
+  if(Math.abs(diff) < 1) return `Cash flow this month is tracking about the same as last month.`;
+  const word = diff >= 0 ? 'ahead of' : 'behind';
+  return `This month's cash flow is ${fmt(Math.abs(diff))} ${word} last month's pace so far.`;
+}
+function computeExpInsight(){
+  const mk = activeMonthKey();
+  const monthExp = data.expenses.filter(x=>monthKeyOf(x.date)===mk);
+  if(!monthExp.length) return null;
+  const top = categoryTotals(monthExp)[0];
+  if(!top) return null;
+  const [cat, amt] = top;
+  let sum = 0, count = 0;
+  for(let i=1;i<=3;i++){
+    const pk = shiftMonthKey(mk, -i);
+    const pExp = data.expenses.filter(x=>monthKeyOf(x.date)===pk && ((x.category||'Uncategorized').trim())===cat);
+    if(pExp.length){ sum += pExp.reduce((s,x)=>s+(Number(x.amount)||0),0); count++; }
+  }
+  if(count < 1 || sum/count < 0.5) return `${cat} is your top category this month at ${fmt(amt)}.`;
+  const avg = sum / count;
+  const diff = amt - avg;
+  const pct = Math.round((diff/avg)*100);
+  if(Math.abs(pct) < 5) return `${cat} spending is in line with your recent average (${fmt(amt)}).`;
+  const word = pct >= 0 ? 'more' : 'less';
+  return `${cat}: ${fmt(amt)} this month, ${Math.abs(pct)}% ${word} than your recent average of ${fmt(avg)}.`;
+}
+
 /* Dashboard */
 function renderDashExpenses(){
   const monthExp = currentMonthExpenses();
@@ -3479,14 +3609,16 @@ function renderDashExpenses(){
 
   document.getElementById('dashExpMonth').textContent = fmt(expTotal);
   document.getElementById('dashIncMonth').textContent = fmt(incTotal);
-  document.getElementById('dashIncome').textContent = fmt(incTotal);
-  document.getElementById('dashExpense').textContent = fmt(expTotal);
-  document.getElementById('dashCashFlow').textContent = fmt(net);
+  setFigureText(document.getElementById('dashIncome'), fmt(incTotal));
+  setFigureText(document.getElementById('dashExpense'), fmt(expTotal));
+  setFigureText(document.getElementById('dashCashFlow'), fmt(net));
   document.getElementById('dashCashFlow').style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('dashTxnCount').textContent = monthExp.length + monthInc.length;
+  setFigureText(document.getElementById('dashTxnCount'), String(monthExp.length + monthInc.length));
 
   const top = categoryTotals(monthExp)[0];
   document.getElementById('dashExpTop').textContent = top ? top[0] : '—';
+
+  updateInsight('dashInsight', 'dashInsightText', computeDashInsight());
 
   const allRec = [
     ...recurringItems('expenses').map(x=>({...x, _type:'exp'})),
