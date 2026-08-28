@@ -1106,6 +1106,18 @@
     width: 150px; min-height: 42px; flex-shrink: 0;
   }
 
+
+  .holding-row input.h-price {
+    width: 80px; text-align: right; font-size: 12px; color: var(--text-secondary);
+  }
+  .holdings-toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 8px;
+  }
+  .quote-status {
+    font-size: 11px; color: var(--text-tertiary);
+  }
+
 </style>
 </head>
 <body>
@@ -2416,7 +2428,11 @@ function renderRows(){
         <div class="holdings-panel ${isOpen?'open':''}" id="holdings-${acc.id}">
           ${acc.holdings.map(h=> holdingRowHtml(acc.id, h)).join('')}
           <div class="holdings-sum" id="hsum-${acc.id}"></div>
-          <button class="add-holding" data-acc="${acc.id}">+ Add holding</button>
+          <div class="holdings-toolbar">
+            <button class="add-holding" data-acc="${acc.id}" style="width:auto;margin:0;">+ Add holding</button>
+            <button class="ghost refresh-quotes" data-acc="${acc.id}" type="button">Refresh prices</button>
+            <span class="quote-status" id="qstat-${acc.id}"></span>
+          </div>
         </div>
       `;
       aWrap.appendChild(block);
@@ -2460,6 +2476,9 @@ function renderRows(){
       renderSummary();
       renderTallies();
     });
+  });
+    document.querySelectorAll('#assetsRows .refresh-quotes').forEach(el=>{
+    el.addEventListener('click', ()=> refreshAccountQuotes(el.dataset.acc));
   });
   document.querySelectorAll('#assetsRows .add-holding').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -2508,12 +2527,173 @@ function renderRows(){
   });
 }
 
+
+const GECKO_IDS = {
+  BTC:'bitcoin', ETH:'ethereum', SOL:'solana', XRP:'ripple', DOGE:'dogecoin',
+  ADA:'cardano', AVAX:'avalanche-2', DOT:'polkadot', LINK:'chainlink',
+  MATIC:'matic-network', POL:'polygon-ecosystem-token', ATOM:'cosmos',
+  LTC:'litecoin', BCH:'bitcoin-cash', UNI:'uniswap', AAVE:'aave',
+  SHIB:'shiba-inu', PEPE:'pepe', TON:'the-open-network', SUI:'sui',
+  NEAR:'near', APT:'aptos', ARB:'arbitrum', OP:'optimism',
+  TRX:'tron', XLM:'stellar', HBAR:'hedera-hashgraph', FIL:'filecoin',
+  TRAC:'origintrail', RENDER:'render-token', RNDR:'render-token',
+  TAO:'bittensor', FET:'fetch-ai', INJ:'injective-protocol',
+  USDT:'tether', USDC:'usd-coin'
+};
+const geckoIdCache = {};
+
+function isCryptoTicker(t){
+  const s = String(t||'').trim().toUpperCase().replace(/-USD$/,'').replace(/USD$/,'');
+  return !!(GECKO_IDS[s] || geckoIdCache[s]);
+}
+
+function normalizeTicker(t){
+  t = String(t||'').trim().toUpperCase();
+  if(!t) return '';
+  return t.replace(/\s+/g,'');
+}
+
+async function geckoIdFor(ticker){
+  const s = normalizeTicker(ticker).replace(/-USD$/,'').replace(/USD$/,'');
+  if(GECKO_IDS[s]) return GECKO_IDS[s];
+  if(geckoIdCache[s]) return geckoIdCache[s];
+  try{
+    const res = await fetch('https://api.coingecko.com/api/v3/search?query=' + encodeURIComponent(s), { cache: 'no-store' });
+    if(!res.ok) return null;
+    const json = await res.json();
+    const coins = (json && json.coins) || [];
+    const exact = coins.find(c => String(c.symbol||'').toUpperCase() === s);
+    const id = (exact || coins[0] || {}).id;
+    if(id) geckoIdCache[s] = id;
+    return id || null;
+  }catch(e){ return null; }
+}
+
+async function fetchGeckoPrice(ticker){
+  const id = await geckoIdFor(ticker);
+  if(!id) return null;
+  try{
+    const url = 'https://api.coingecko.com/api/v3/simple/price?ids=' + encodeURIComponent(id) + '&vs_currencies=usd';
+    const res = await fetch(url, { cache: 'no-store' });
+    if(!res.ok) return null;
+    const json = await res.json();
+    const px = json && json[id] && json[id].usd;
+    return (px && Number(px) > 0) ? Number(px) : null;
+  }catch(e){ return null; }
+}
+
+async function fetchYahooPrice(ticker){
+  let sym = normalizeTicker(ticker);
+  const base = sym.replace(/-USD$/,'').replace(/USD$/,'');
+  if(GECKO_IDS[base] && !sym.includes('-')) sym = base + '-USD';
+  const yahoo = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&range=1d';
+  const proxies = [
+    yahoo,
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(yahoo),
+    'https://corsproxy.io/?' + encodeURIComponent(yahoo)
+  ];
+  for(const url of proxies){
+    try{
+      const res = await fetch(url, { cache: 'no-store' });
+      if(!res.ok) continue;
+      const json = await res.json();
+      const meta = json && json.chart && json.chart.result && json.chart.result[0] && json.chart.result[0].meta;
+      const px = meta && (meta.regularMarketPrice || meta.previousClose);
+      if(px && Number(px) > 0) return Number(px);
+    }catch(e){}
+  }
+  return null;
+}
+
+async function fetchQuote(ticker){
+  if(!normalizeTicker(ticker)) return null;
+  // Crypto: CoinGecko first (CORS-friendly, no key)
+  if(isCryptoTicker(ticker) || GECKO_IDS[normalizeTicker(ticker).replace(/-USD$/,'')]){
+    const g = await fetchGeckoPrice(ticker);
+    if(g) return g;
+  }
+  const y = await fetchYahooPrice(ticker);
+  if(y) return y;
+  // Unknown ticker: try Gecko search as last resort
+  return await fetchGeckoPrice(ticker);
+}
+
+async function fetchGeckoPricesByIds(ids){
+  if(!ids.length) return {};
+  try{
+    const url = 'https://api.coingecko.com/api/v3/simple/price?ids=' + encodeURIComponent(ids.join(',')) + '&vs_currencies=usd';
+    const res = await fetch(url, { cache: 'no-store' });
+    if(!res.ok) return {};
+    return await res.json();
+  }catch(e){ return {}; }
+}
+
+async function refreshAccountQuotes(accId){
+  const acc = data.accounts.find(a=>a.id===accId);
+  if(!acc || !acc.holdings) return;
+  const status = document.getElementById('qstat-' + accId);
+  if(status) status.textContent = 'Updating…';
+  let ok = 0, fail = 0;
+  // Batch CoinGecko in one call
+  const cryptoHs = [];
+  for(const h of acc.holdings){
+    if(!(h.ticker||'').trim()) continue;
+    if(isCryptoTicker(h.ticker) || GECKO_IDS[normalizeTicker(h.ticker).replace(/-USD$/,'')]){
+      cryptoHs.push(h);
+    }
+  }
+  const ids = [];
+  for(const h of cryptoHs){
+    const id = await geckoIdFor(h.ticker);
+    if(id){ h._gid = id; if(!ids.includes(id)) ids.push(id); }
+  }
+  const batch = await fetchGeckoPricesByIds(ids);
+  for(const h of cryptoHs){
+    const px = h._gid && batch[h._gid] && batch[h._gid].usd;
+    delete h._gid;
+    if(px && Number(px) > 0){
+      h.price = Number(px);
+      h.priceAt = new Date().toISOString();
+      const units = Number(h.units)||0;
+      if(units) h.value = Math.round(units * h.price * 100) / 100;
+      ok++;
+    }
+  }
+  for(const h of acc.holdings){
+    if(!(h.ticker||'').trim()) continue;
+    if(h.priceAt && (Date.now() - new Date(h.priceAt).getTime()) < 15000) continue; // just batched
+    const px = await fetchQuote(h.ticker);
+    if(px){
+      h.price = Math.round(px * 100000000) / 100000000;
+      h.priceAt = new Date().toISOString();
+      const units = Number(h.units)||0;
+      if(units) h.value = Math.round(units * h.price * 100) / 100;
+      ok++;
+    } else {
+      fail++;
+    }
+  }
+  acc.balance = accountBalance(acc);
+  saveData();
+  renderRows();
+  renderSummary();
+  renderTallies();
+  const st = document.getElementById('qstat-' + accId);
+  if(st){
+    if(!ok && !fail) st.textContent = 'Add tickers first';
+    else if(fail && !ok) st.textContent = 'Could not fetch prices';
+    else st.textContent = 'Updated ' + ok + (fail ? ' · ' + fail + ' failed' : '');
+  }
+}
+
 function holdingRowHtml(accId, h){
+  const px = (h.price || h.price===0) ? h.price : '';
   return `
     <div class="holding-row">
       <input class="h-name" value="${escapeHtml(h.name||'')}" placeholder="Name" data-acc="${accId}" data-hid="${h.id}" data-hfield="name">
       <input class="h-ticker" value="${escapeHtml(h.ticker||'')}" placeholder="Ticker" data-acc="${accId}" data-hid="${h.id}" data-hfield="ticker">
-      <input class="h-units" type="number" value="${h.units||0}" placeholder="Units" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="units">
+      <input class="h-units" type="number" value="${h.units||0}" placeholder="Shares" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="units">
+      <input class="h-price" type="number" value="${px}" placeholder="Price" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="price" title="Last price">
       <input class="h-value" type="number" value="${h.value||0}" placeholder="Value" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="value">
       <button class="del" data-acc="${accId}" data-hid="${h.id}" title="Remove">✕</button>
     </div>
@@ -2532,16 +2712,52 @@ function updateHoldingsSum(acc){
   el.className = 'holdings-sum';
 }
 
+const quoteTimers = {};
 function onHoldingChange(e){
   const {acc: accId, hid, hfield} = e.target.dataset;
   const acc = data.accounts.find(a=>a.id===accId);
   if(!acc || !acc.holdings) return;
   const h = acc.holdings.find(x=>x.id===hid);
   if(!h) return;
-  if(hfield === 'units' || hfield === 'value'){
+  if(hfield === 'units' || hfield === 'value' || hfield === 'price'){
     h[hfield] = Number(e.target.value)||0;
+    if(hfield === 'units' || hfield === 'price'){
+      const units = Number(h.units)||0;
+      const price = Number(h.price)||0;
+      if(units && price){
+        h.value = Math.round(units * price * 100) / 100;
+        const valInput = document.querySelector(`#assetsRows input.h-value[data-hid="${hid}"]`);
+        if(valInput) valInput.value = h.value;
+      }
+    }
   } else {
     h[hfield] = e.target.value;
+  }
+  if(hfield === 'ticker'){
+    const key = accId + ':' + hid;
+    clearTimeout(quoteTimers[key]);
+    quoteTimers[key] = setTimeout(async ()=>{
+      if(!(h.ticker||'').trim()) return;
+      const st = document.getElementById('qstat-' + accId);
+      if(st) st.textContent = 'Looking up ' + h.ticker.toUpperCase() + '…';
+      const px = await fetchQuote(h.ticker);
+      if(px){
+        h.ticker = String(h.ticker).toUpperCase().trim();
+        h.price = Math.round(px * 10000) / 10000;
+        h.priceAt = new Date().toISOString();
+        const units = Number(h.units)||0;
+        if(units) h.value = Math.round(units * h.price * 100) / 100;
+        acc.balance = accountBalance(acc);
+        saveData();
+        renderRows();
+        renderSummary();
+        renderTallies();
+        const st2 = document.getElementById('qstat-' + accId);
+        if(st2) st2.textContent = h.ticker + ' @ ' + h.price;
+      } else if(st){
+        st.textContent = 'No quote for ' + (h.ticker||'');
+      }
+    }, 700);
   }
   acc.balance = accountBalance(acc);
   // update the readonly balance display
