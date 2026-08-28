@@ -1118,6 +1118,12 @@
     font-size: 11px; color: var(--text-tertiary);
   }
 
+
+  .settings-heading {
+    font-size: 13px; font-weight: 600; color: var(--text);
+    margin: 4px 0 10px; letter-spacing: -0.01em;
+  }
+
 </style>
 </head>
 <body>
@@ -1525,6 +1531,13 @@
   <div class="modal" role="dialog" style="max-width:440px;">
     <h3>Settings</h3>
 
+    <h4 class="settings-heading">Market data</h4>
+    <div class="settings-field">
+      <label>Stock quotes API key</label>
+      <input type="text" id="quoteKey" placeholder="Finnhub API key" autocomplete="off" spellcheck="false">
+      <div class="settings-hint">Needed for stocks (AAPL, NVDA, etc.). Get a free key at finnhub.io/register. Crypto does not need this.</div>
+    </div>
+
     <div class="settings-row">
       <label>Cloud sync</label>
       <div class="toggle" id="syncToggle" role="switch" aria-checked="false"></div>
@@ -1579,6 +1592,7 @@ alter publication supabase_realtime add table ledger_data;</div>
 const STORAGE_KEY = 'ledger-networth-v1';
 const THEME_KEY = 'ledger-theme';
 const SYNC_CFG_KEY = 'ledger-sync-cfg';
+const QUOTE_KEY = 'ledger-quote-key';
 const ASSET_CATS = ['Cash','Investments','Stocks','Blockchain','Retirement','Real Estate','Vehicles','Other'];
 const LIAB_CATS = ['Credit Card','Loan','Mortgage','Other'];
 const EXPENSE_CATS = ['Housing','Utilities','Groceries','Dining','Transportation','Insurance','Healthcare','Entertainment','Shopping','Subscriptions','Travel','Education','Personal Care','Debt Payment','Savings & Investments','Gifts & Donations','Other'];
@@ -2431,6 +2445,7 @@ function renderRows(){
           <div class="holdings-toolbar">
             <button class="add-holding" data-acc="${acc.id}" style="width:auto;margin:0;">+ Add holding</button>
             <button class="ghost refresh-quotes" data-acc="${acc.id}" type="button">Refresh prices</button>
+            <button class="ghost quote-key-btn" type="button">Stock API key</button>
             <span class="quote-status" id="qstat-${acc.id}"></span>
           </div>
         </div>
@@ -2477,7 +2492,10 @@ function renderRows(){
       renderTallies();
     });
   });
-    document.querySelectorAll('#assetsRows .refresh-quotes').forEach(el=>{
+      document.querySelectorAll('#assetsRows .quote-key-btn').forEach(el=>{
+    el.addEventListener('click', ()=> openSettings());
+  });
+  document.querySelectorAll('#assetsRows .refresh-quotes').forEach(el=>{
     el.addEventListener('click', ()=> refreshAccountQuotes(el.dataset.acc));
   });
   document.querySelectorAll('#assetsRows .add-holding').forEach(el=>{
@@ -2582,15 +2600,42 @@ async function fetchGeckoPrice(ticker){
   }catch(e){ return null; }
 }
 
+function getQuoteKey(){
+  try { return (localStorage.getItem(QUOTE_KEY) || '').trim(); }
+  catch(e){ return ''; }
+}
+
+async function fetchFinnhubPrice(ticker, key){
+  const sym = normalizeTicker(ticker).replace(/-USD$/,'');
+  try{
+    const res = await fetch('https://finnhub.io/api/v1/quote?symbol=' + encodeURIComponent(sym) + '&token=' + encodeURIComponent(key), { cache: 'no-store' });
+    if(!res.ok) return null;
+    const json = await res.json();
+    const px = json && (json.c || json.pc);
+    return (px && Number(px) > 0) ? Number(px) : null;
+  }catch(e){ return null; }
+}
+
+async function fetchTwelvePrice(ticker, key){
+  const sym = normalizeTicker(ticker);
+  try{
+    const res = await fetch('https://api.twelvedata.com/price?symbol=' + encodeURIComponent(sym) + '&apikey=' + encodeURIComponent(key), { cache: 'no-store' });
+    if(!res.ok) return null;
+    const json = await res.json();
+    const px = json && json.price;
+    return (px && Number(px) > 0) ? Number(px) : null;
+  }catch(e){ return null; }
+}
+
 async function fetchYahooPrice(ticker){
   let sym = normalizeTicker(ticker);
   const base = sym.replace(/-USD$/,'').replace(/USD$/,'');
   if(GECKO_IDS[base] && !sym.includes('-')) sym = base + '-USD';
-  const yahoo = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&range=1d';
+  const yahoo = 'https://query2.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&range=1d';
   const proxies = [
     yahoo,
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(yahoo),
-    'https://corsproxy.io/?' + encodeURIComponent(yahoo)
+    'https://corsproxy.io/?' + encodeURIComponent(yahoo),
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(yahoo)
   ];
   for(const url of proxies){
     try{
@@ -2605,16 +2650,25 @@ async function fetchYahooPrice(ticker){
   return null;
 }
 
+async function fetchStockPrice(ticker){
+  const key = getQuoteKey();
+  if(key){
+    const fh = await fetchFinnhubPrice(ticker, key);
+    if(fh) return fh;
+    const td = await fetchTwelvePrice(ticker, key);
+    if(td) return td;
+  }
+  return await fetchYahooPrice(ticker);
+}
+
 async function fetchQuote(ticker){
   if(!normalizeTicker(ticker)) return null;
-  // Crypto: CoinGecko first (CORS-friendly, no key)
   if(isCryptoTicker(ticker) || GECKO_IDS[normalizeTicker(ticker).replace(/-USD$/,'')]){
     const g = await fetchGeckoPrice(ticker);
     if(g) return g;
   }
-  const y = await fetchYahooPrice(ticker);
-  if(y) return y;
-  // Unknown ticker: try Gecko search as last resort
+  const s = await fetchStockPrice(ticker);
+  if(s) return s;
   return await fetchGeckoPrice(ticker);
 }
 
@@ -2681,7 +2735,7 @@ async function refreshAccountQuotes(accId){
   const st = document.getElementById('qstat-' + accId);
   if(st){
     if(!ok && !fail) st.textContent = 'Add tickers first';
-    else if(fail && !ok) st.textContent = 'Could not fetch prices';
+    else if(fail && !ok) st.textContent = getQuoteKey() ? 'Could not fetch prices' : 'Stocks need a free Finnhub key in Settings';
     else st.textContent = 'Updated ' + ok + (fail ? ' · ' + fail + ' failed' : '');
   }
 }
@@ -3534,6 +3588,8 @@ function openSettings(){
   document.getElementById('sbUrl').value = cfg.url || '';
   document.getElementById('sbKey').value = cfg.key || '';
   document.getElementById('sbSyncId').value = cfg.syncId || '';
+  const qk = document.getElementById('quoteKey');
+  if(qk) qk.value = getQuoteKey();
   document.getElementById('settingsMsg').textContent = '';
   settingsOverlay.classList.add('open');
 }
@@ -3577,6 +3633,8 @@ syncToggle.addEventListener('click', ()=>{
 
 document.getElementById('settingsSave').addEventListener('click', async ()=>{
   const msg = document.getElementById('settingsMsg');
+  const qk = document.getElementById('quoteKey');
+  if(qk) localStorage.setItem(QUOTE_KEY, qk.value.trim());
   const cfg = {
     enabled: syncToggle.classList.contains('on'),
     url: document.getElementById('sbUrl').value.trim(),
