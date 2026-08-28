@@ -279,6 +279,9 @@
   .goal-card .ring-svg { margin-bottom: 10px; }
   .goal-card .goal-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
   .goal-card .goal-detail { font-size: 11.5px; color: var(--text-tertiary); line-height: 1.4; }
+  .goal-card.clickable { cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+  .goal-card.clickable:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); transform: translateY(-1px); }
+  .goal-card.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .goals-toggle-row { text-align: center; margin-bottom: 20px; }
   #dashDetails { animation: detailsFadeIn 180ms ease; }
   @keyframes detailsFadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
@@ -1725,6 +1728,18 @@
   <div class="modal" role="dialog" style="max-width:440px;">
     <h3>Settings</h3>
 
+    <h4 class="settings-heading">Goals</h4>
+    <div class="settings-field">
+      <label>Bills-covered warning threshold</label>
+      <input type="number" id="goalBillsThreshold" min="50" max="100" step="1" placeholder="90">
+      <div class="settings-hint">Below this % of bills covered, the "Bills covered" ring goes red instead of amber. Default 90%.</div>
+    </div>
+    <div class="settings-field">
+      <label>Monthly savings target</label>
+      <input type="number" id="goalSavingsTarget" min="0" step="any" placeholder="Optional — leave blank for automatic">
+      <div class="settings-hint">If set, "Saving the extra" turns green once you've put away this much in a month. Leave blank to use an automatic surplus rule instead.</div>
+    </div>
+
     <h4 class="settings-heading">Market data</h4>
     <div class="settings-field">
       <label>Stock quotes API key</label>
@@ -2606,7 +2621,11 @@ function switchTab(tabId){
   document.querySelectorAll('.panel').forEach(p=>{
     p.classList.toggle('active', p.id === 'panel-' + tabId);
   });
-  if(tabId === 'dashboard'){ renderChart(); renderDashExpenses(); }
+  if(tabId === 'dashboard'){
+    const details = document.getElementById('dashDetails');
+    if(details && details.style.display !== 'none') renderChart();
+    renderDashExpenses();
+  }
   if(tabId === 'accounts') renderAccountsChart();
   if(tabId === 'cashflow'){
     if(typeof renderExpenseAll === 'function') renderExpenseAll();
@@ -2663,6 +2682,10 @@ const expandedAccounts = new Set();
 
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function truncateText(str, max){
+  if(!str || str.length <= max) return str;
+  return str.slice(0, max - 1).trimEnd() + '…';
 }
 
 function renderRows(){
@@ -3785,39 +3808,73 @@ function allFindings(){
 }
 
 /* ============ Goal Health Rings ============ */
-/* Each goal: { id, label, state: 'green'|'amber'|'red', detail: <one-line explanation> }.
-   Rules are intentionally simple and computed entirely from data already on hand —
-   no separate goal-setup step required to get a useful answer. */
+/* Each goal: { id, label, state: 'green'|'amber'|'red', detail: <one-line explanation>,
+   goto: {tab, sub?} | null }. Rules are intentionally simple and computed entirely from
+   data already on hand — no separate goal-setup step required to get a useful answer. */
+function domainToGoto(domain){
+  if(domain === 'planner') return {tab:'planner'};
+  if(domain === 'cashflow') return {tab:'cashflow', sub:'expenses'};
+  if(domain === 'networth') return {tab:'accounts'};
+  return null;
+}
+
+function ensureGoalSettings(){
+  if(!data.goalSettings || typeof data.goalSettings !== 'object') data.goalSettings = {};
+  if(data.goalSettings.billsThresholdPct == null) data.goalSettings.billsThresholdPct = 90;
+  if(data.goalSettings.savingsTarget == null) data.goalSettings.savingsTarget = 0;
+}
+
 function goalBillsCovered(){
+  ensureGoalSettings();
   const bills = recurringMonthlyTotal('expenses');
   const recurringIncome = recurringMonthlyTotal('incomes');
   const income = recurringIncome > 0 ? recurringIncome : monthCollectionTotal('incomes', currentMonthKey());
+  const goto = {tab:'cashflow', sub:'expenses'};
+  const thresholdFrac = (Number(data.goalSettings.billsThresholdPct) || 90) / 100;
   if(bills < 1){
-    return { id:'bills', label:'Bills covered', state:'green', detail:'No recurring bills tracked yet.' };
+    return { id:'bills', label:'Bills covered', state:'green', detail:'No recurring bills tracked yet.', goto };
   }
   if(income >= bills){
-    return { id:'bills', label:'Bills covered', state:'green', detail:`Income covers your ${fmt(bills)}/mo in bills.` };
+    return { id:'bills', label:'Bills covered', state:'green', detail:`Income covers your ${fmt(bills)}/mo in bills.`, goto };
   }
-  if(income >= bills * 0.9){
-    return { id:'bills', label:'Bills covered', state:'amber', detail:`${fmt(bills - income)} short of covering bills this month.` };
+  if(income >= bills * thresholdFrac){
+    return { id:'bills', label:'Bills covered', state:'amber', detail:`${fmt(bills - income)} short of covering bills this month.`, goto };
   }
-  return { id:'bills', label:'Bills covered', state:'red', detail:`${fmt(bills - income)} short of your ${fmt(bills)}/mo in bills.` };
+  return { id:'bills', label:'Bills covered', state:'red', detail:`${fmt(bills - income)} short of your ${fmt(bills)}/mo in bills.`, goto };
 }
 
 function goalSavingExtra(){
+  ensureGoalSettings();
   const mk = currentMonthKey();
   const monthExp = data.expenses.filter(x=>monthKeyOf(x.date)===mk);
   const expTotal = monthExp.reduce((s,x)=>s+(Number(x.amount)||0),0);
   const incTotal = monthCollectionTotal('incomes', mk);
   const net = incTotal - expTotal;
   const savings = monthExp.filter(x=>(x.category||'').trim()==='Savings & Investments').reduce((s,x)=>s+(Number(x.amount)||0),0);
+  const goto = {tab:'cashflow', sub:'expenses'};
+  const target = Number(data.goalSettings.savingsTarget) || 0;
+
   if(net < 0){
-    return { id:'saving', label:'Saving the extra', state:'red', detail:`Spending is ${fmt(Math.abs(net))} ahead of income this month.` };
+    return { id:'saving', label:'Saving the extra', state:'red', detail:`Spending is ${fmt(Math.abs(net))} ahead of income this month.`, goto };
   }
+
+  if(target > 0){
+    const towardTarget = Math.max(savings, net);
+    if(towardTarget >= target){
+      return { id:'saving', label:'Saving the extra', state:'green', detail:`${fmt(towardTarget)} toward your ${fmt(target)}/mo savings target.`, goto };
+    }
+    return { id:'saving', label:'Saving the extra', state:'amber', detail:`${fmt(towardTarget)} of your ${fmt(target)}/mo savings target so far.`, goto };
+  }
+
   if(savings > 0){
-    return { id:'saving', label:'Saving the extra', state:'green', detail:`${fmt(savings)} went to savings/investments this month.` };
+    return { id:'saving', label:'Saving the extra', state:'green', detail:`${fmt(savings)} went to savings/investments this month.`, goto };
   }
-  return { id:'saving', label:'Saving the extra', state:'amber', detail:`Not overspending, but nothing earmarked for savings yet.` };
+  // No explicit savings entry and no target set — a healthy unlabeled surplus still counts
+  const margin = incTotal > 0 ? net / incTotal : 0;
+  if(net > 0 && margin >= 0.10){
+    return { id:'saving', label:'Saving the extra', state:'green', detail:`Netting ${fmt(net)} this month — a healthy surplus, even unlabeled.`, goto };
+  }
+  return { id:'saving', label:'Saving the extra', state:'amber', detail:`Not overspending, but nothing earmarked for savings yet.`, goto };
 }
 
 function goalNoRedFlags(){
@@ -3825,12 +3882,12 @@ function goalNoRedFlags(){
   const urgent = findings.filter(f=>f.severity===3);
   const notable = findings.filter(f=>f.severity===2);
   if(urgent.length){
-    return { id:'flags', label:'No red flags', state:'red', detail: urgent[0].text };
+    return { id:'flags', label:'No red flags', state:'red', detail: urgent[0].text, goto: domainToGoto(urgent[0].domain) };
   }
   if(notable.length){
-    return { id:'flags', label:'No red flags', state:'amber', detail: notable[0].text };
+    return { id:'flags', label:'No red flags', state:'amber', detail: notable[0].text, goto: domainToGoto(notable[0].domain) };
   }
-  return { id:'flags', label:'No red flags', state:'green', detail:'Nothing urgent right now.' };
+  return { id:'flags', label:'No red flags', state:'green', detail:'Nothing urgent right now.', goto: null };
 }
 
 function allGoals(){
@@ -3841,13 +3898,26 @@ function renderGoals(){
   const wrap = document.getElementById('goalsRow');
   if(!wrap) return;
   const goals = allGoals();
-  wrap.innerHTML = goals.map(g => `
-    <div class="goal-card">
+  wrap.innerHTML = goals.map((g, i) => `
+    <div class="goal-card${g.goto ? ' clickable' : ''}" data-goal-idx="${i}" ${g.goto ? 'role="button" tabindex="0"' : ''}>
       ${ringSvg(g.state)}
       <div class="goal-label">${escapeHtml(g.label)}</div>
-      <div class="goal-detail">${escapeHtml(g.detail)}</div>
+      <div class="goal-detail">${escapeHtml(truncateText(g.detail, 60))}</div>
     </div>
   `).join('');
+  wrap.querySelectorAll('.goal-card').forEach((card, i)=>{
+    const g = goals[i];
+    if(!g.goto) return;
+    const activate = ()=>{
+      switchTab(g.goto.tab);
+      if(g.goto.sub){
+        const subBtn = document.querySelector(`.subtab-btn[data-sub="${g.goto.sub}"]`);
+        if(subBtn) subBtn.click();
+      }
+    };
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); activate(); } });
+  });
 }
 
 /* ---- Freshness memory: avoid repeating the same non-urgent finding
@@ -4171,6 +4241,9 @@ function openSettings(){
   document.getElementById('sbSyncId').value = cfg.syncId || '';
   const qk = document.getElementById('quoteKey');
   if(qk) qk.value = getQuoteKey();
+  ensureGoalSettings();
+  document.getElementById('goalBillsThreshold').value = data.goalSettings.billsThresholdPct;
+  document.getElementById('goalSavingsTarget').value = data.goalSettings.savingsTarget || '';
   document.getElementById('settingsMsg').textContent = '';
   settingsOverlay.classList.add('open');
 }
@@ -4220,6 +4293,14 @@ document.getElementById('settingsSave').addEventListener('click', async ()=>{
   const msg = document.getElementById('settingsMsg');
   const qk = document.getElementById('quoteKey');
   if(qk) localStorage.setItem(QUOTE_KEY, qk.value.trim());
+
+  ensureGoalSettings();
+  let billsThreshold = Number(document.getElementById('goalBillsThreshold').value);
+  if(!billsThreshold || billsThreshold < 50 || billsThreshold > 100) billsThreshold = 90;
+  data.goalSettings.billsThresholdPct = billsThreshold;
+  data.goalSettings.savingsTarget = Math.max(0, Number(document.getElementById('goalSavingsTarget').value) || 0);
+  saveData();
+  renderGoals();
   const cfg = {
     enabled: syncToggle.classList.contains('on'),
     url: document.getElementById('sbUrl').value.trim(),
