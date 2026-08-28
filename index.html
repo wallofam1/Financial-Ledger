@@ -911,9 +911,57 @@
   .wallet-connect-row .wallet-address:focus { outline: none; border-color: var(--accent); }
   .wallet-connect-row .wallet-chain { flex-shrink: 0; width: 92px; }
   .wallet-connect-row .refresh-wallet { flex-shrink: 0; }
+  .wallet-connect-row .contrib-employee, .wallet-connect-row .contrib-employer {
+    flex: 1; min-width: 100px; font-family: var(--font); font-size: 12.5px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 9px 10px; color: var(--text);
+  }
+  .wallet-connect-row .contrib-employee:focus, .wallet-connect-row .contrib-employer:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .wallet-connect-row .log-contribution { flex-shrink: 0; }
   .wallet-hint {
     font-size: 11px; color: var(--text-tertiary); padding: 6px 8px 2px; line-height: 1.4;
   }
+
+  /* Split deposits (income → multiple accounts) */
+  .split-toggle-row { padding: 4px 2px 8px; }
+  .split-toggle-row button {
+    background: none; border: none; color: var(--accent); font-family: var(--font);
+    font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .split-panel {
+    background: var(--bg-input); border-radius: var(--radius-sm);
+    padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .split-row { display: flex; gap: 6px; align-items: center; }
+  .split-row .split-account { flex: 1.4; min-width: 0; }
+  .split-row .split-amount { flex: 1; min-width: 0; text-align: right; }
+  .split-row select, .split-row input {
+    font-family: var(--font); font-size: 12.5px; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 6px; padding: 7px 8px; color: var(--text);
+  }
+  .split-row select:focus, .split-row input:focus { outline: none; border-color: var(--accent); }
+  .split-row .split-fill {
+    flex-shrink: 0; background: none; border: 1px solid var(--border-strong); color: var(--text-secondary);
+    font-family: var(--font); font-size: 11px; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  }
+  .split-row .split-fill:hover { color: var(--accent); border-color: var(--accent); }
+  .split-row .split-del {
+    flex-shrink: 0; background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; padding: 4px; display: flex; align-items: center;
+  }
+  .split-row .split-del:hover { color: var(--red); }
+  .split-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .split-footer .split-add {
+    background: none; border: 1px dashed var(--border-strong); color: var(--text-secondary);
+    font-family: var(--font); font-size: 11.5px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .split-footer .split-add:hover { color: var(--accent); border-color: var(--accent); }
+  .split-remaining { font-size: 11.5px; font-weight: 500; }
+  .split-remaining.ok { color: var(--green); }
+  .split-remaining.off { color: var(--amber); }
+
   .add-holding {
     margin: 8px; background: none; border: 1px dashed var(--border-strong);
     color: var(--text-secondary); font-family: var(--font); font-size: 12px;
@@ -1270,7 +1318,7 @@
 
   /* Expense compact + more */
   .entry-more { display: none; }
-  .entry-row.open-more .entry-more { display: block; }
+  .entry-row.open-more .entry-more, .income-entry-wrap.open-more .entry-more { display: block; }
   .entry-row .more-btn {
     background: none; border: none; color: var(--text-tertiary);
     cursor: pointer; font-size: 16px; min-width: 28px; min-height: 28px;
@@ -2228,6 +2276,55 @@ function applyExpenseCreditChange(item, prevAmount, prevAccountId, prevDebitId){
   }
 }
 
+/* ---- Income deposits: supports either a single destination account
+   (creditAccountId) or a split across multiple accounts (deposits[]).
+   Both paths funnel through the same reconcile helper so delete/undo/edit
+   always reverse exactly what was actually applied, whichever mode is active. */
+function effectiveDeposits(item){
+  if(item.deposits && item.deposits.length) return item.deposits;
+  if(item.creditAccountId) return [{ accountId: item.creditAccountId, amount: item.amount }];
+  return [];
+}
+function reverseIncomeCredits(deposits, label){
+  (deposits||[]).forEach(d=>{
+    const amt = Number(d.amount)||0;
+    if(d.accountId && amt) creditAsset(d.accountId, -amt, label);
+  });
+}
+function applyIncomeCredits(deposits, label){
+  (deposits||[]).forEach(d=>{
+    const amt = Number(d.amount)||0;
+    if(d.accountId && amt) creditAsset(d.accountId, amt, label);
+  });
+}
+/** Snapshots current effective deposits, lets you mutate the item freely,
+    then reverses the old credits and applies the new ones. Safe for both
+    single-account and split-mode incomes, and for transitions between them. */
+function reconcileIncomeCredits(item, mutateFn){
+  const label = item.desc || item.category || 'Paycheck';
+  const before = JSON.parse(JSON.stringify(effectiveDeposits(item)));
+  reverseIncomeCredits(before, label);
+  mutateFn();
+  const after = effectiveDeposits(item);
+  applyIncomeCredits(after, label);
+  saveData();
+}
+function updateSplitRemaining(incId){
+  const inc = data.incomes.find(x=>x.id===incId);
+  const el = document.getElementById('splitrem-' + incId);
+  if(!inc || !el) return;
+  const total = Number(inc.amount)||0;
+  const allocated = (inc.deposits||[]).reduce((s,d)=>s+(Number(d.amount)||0),0);
+  const remaining = Math.round((total - allocated) * 100) / 100;
+  if(Math.abs(remaining) < 0.005){
+    el.textContent = 'Fully allocated';
+    el.className = 'split-remaining ok';
+  } else {
+    el.textContent = (remaining > 0 ? fmt(remaining) + ' left to allocate' : fmt(Math.abs(remaining)) + ' over the paycheck amount');
+    el.className = 'split-remaining off';
+  }
+}
+
 
 function totals(){
   let assets=0, liabilities=0;
@@ -2273,11 +2370,14 @@ function softDelete(collection, id, label){
   const idx = arr.findIndex(x => x.id === id);
   if(idx === -1) return;
   const item = arr[idx];
-  if(collection==='expenses' || collection==='incomes'){
+  if(collection==='expenses'){
     const amt = Number(item.amount)||0;
     const label = item.desc || item.category || 'Contribution';
     if(item.creditAccountId) creditAsset(item.creditAccountId, -amt, label);
     if(item.debitAccountId) creditAsset(item.debitAccountId, amt, label);
+  } else if(collection==='incomes'){
+    const label = item.desc || item.category || 'Paycheck';
+    reverseIncomeCredits(effectiveDeposits(item), label);
   }
   arr.splice(idx, 1);
   saveData();
@@ -2304,11 +2404,14 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
   if(!undoStack) return;
   const { collection, item, index } = undoStack;
   data[collection].splice(index, 0, item);
-  if(collection==='expenses' || collection==='incomes'){
+  if(collection==='expenses'){
     const amt = Number(item.amount)||0;
     const label = item.desc || item.category || 'Contribution';
     if(item.creditAccountId) creditAsset(item.creditAccountId, amt, label);
     if(item.debitAccountId) creditAsset(item.debitAccountId, -amt, label);
+  } else if(collection==='incomes'){
+    const label = item.desc || item.category || 'Paycheck';
+    applyIncomeCredits(effectiveDeposits(item), label);
   }
   saveData();
   undoStack = null;
@@ -2702,6 +2805,7 @@ document.querySelectorAll('.subtab-btn').forEach(btn=>{
 
 /* Accounts */
 const expandedAccounts = new Set();
+const expandedIncomeMore = new Set();
 
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2748,6 +2852,15 @@ function renderRows(){
             </div>
             <div class="wallet-hint">Reads your public wallet address only — never asks for a private key or seed phrase.</div>
             <span class="quote-status" id="wstat-${acc.id}"></span>
+          ` : ''}
+          ${acc.category === 'Retirement' ? `
+            <div class="wallet-connect-row">
+              <input type="number" class="contrib-employee" id="cemp-${acc.id}" data-acc="${acc.id}" placeholder="Your contribution" step="0.01">
+              <input type="number" class="contrib-employer" id="cempr-${acc.id}" data-acc="${acc.id}" placeholder="Employer match" step="0.01">
+              <button class="ghost log-contribution" data-acc="${acc.id}" type="button">Log paycheck</button>
+            </div>
+            <div class="wallet-hint">Adds straight to this account's balance — skips Cash Flow entirely, since your contribution is already reflected in your net paycheck.</div>
+            <span class="quote-status" id="cstat-${acc.id}"></span>
           ` : ''}
           ${acc.holdings.map(h=> holdingRowHtml(acc.id, h)).join('')}
           <div class="holdings-sum" id="hsum-${acc.id}"></div>
@@ -2811,6 +2924,12 @@ function renderRows(){
   });
   document.querySelectorAll('#assetsRows .refresh-wallet').forEach(el=>{
     el.addEventListener('click', ()=> refreshWalletHoldings(el.dataset.acc));
+  });
+  document.querySelectorAll('#assetsRows .log-contribution').forEach(el=>{
+    el.addEventListener('click', ()=> logContribution(el.dataset.acc));
+  });
+  document.querySelectorAll('#assetsRows .contrib-employee, #assetsRows .contrib-employer').forEach(el=>{
+    el.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); logContribution(el.dataset.acc); } });
   });
   document.querySelectorAll('#assetsRows .wallet-address').forEach(el=>{
     el.addEventListener('blur', ()=>{
@@ -3255,6 +3374,44 @@ async function refreshWalletHoldings(accId){
   }
 }
 
+/** Logs a single paycheck's retirement contribution directly onto the account's
+    balance — deliberately bypasses Cash Flow entirely. The employee's own
+    contribution is already reflected in their net paycheck (never touches
+    Cash Flow), and the employer match was never the user's cash flow at all,
+    so neither belongs as an income/expense entry. */
+function logContribution(accId){
+  const acc = data.accounts.find(a=>a.id===accId);
+  if(!acc) return;
+  const empInput = document.getElementById('cemp-' + accId);
+  const erInput = document.getElementById('cempr-' + accId);
+  const status = document.getElementById('cstat-' + accId);
+  const empAmt = Number(empInput && empInput.value) || 0;
+  const erAmt = Number(erInput && erInput.value) || 0;
+
+  if(!empAmt && !erAmt){
+    if(status){ status.textContent = 'Enter an amount first'; status.style.color = 'var(--red)'; }
+    return;
+  }
+
+  if(empAmt) creditAsset(accId, empAmt, 'Employee Contributions');
+  if(erAmt) creditAsset(accId, erAmt, 'Employer Match');
+  acc.balance = accountBalance(acc);
+  saveData();
+  renderRows();
+  renderSummary();
+  renderTallies();
+  renderDashExpenses();
+
+  // renderRows() rebuilt the DOM, so re-query the status element after render
+  const newStatus = document.getElementById('cstat-' + accId);
+  if(newStatus){
+    const parts = [];
+    if(empAmt) parts.push('you: ' + fmt(empAmt));
+    if(erAmt) parts.push('employer: ' + fmt(erAmt));
+    newStatus.textContent = 'Logged · ' + parts.join(', ');
+    newStatus.style.color = 'var(--green)';
+  }
+}
 
 async function refreshAccountQuotes(accId){
   const acc = data.accounts.find(a=>a.id===accId);
@@ -3709,7 +3866,102 @@ function bindEntryEvents(wrap, collection){
   wrap.querySelectorAll('.more-btn').forEach(el=>{
     el.addEventListener('click', ()=>{
       const row = el.closest('.entry-row');
-      if(row) row.classList.toggle('open-more');
+      if(row){
+        row.classList.toggle('open-more');
+        const outer = row.closest('.income-entry-wrap');
+        if(outer){
+          outer.classList.toggle('open-more', row.classList.contains('open-more'));
+          const incId = outer.querySelector('[data-id]') && outer.querySelector('[data-id]').dataset.id;
+          if(incId){
+            if(row.classList.contains('open-more')) expandedIncomeMore.add(incId);
+            else expandedIncomeMore.delete(incId);
+          }
+        }
+      }
+    });
+  });
+}
+
+function bindSplitEvents(wrap){
+  wrap.querySelectorAll('.split-enter').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      reconcileIncomeCredits(inc, ()=>{
+        const firstAcc = inc.creditAccountId || '';
+        inc.deposits = [
+          { id: uid(), accountId: firstAcc, amount: inc.amount },
+          { id: uid(), accountId: '', amount: 0 }
+        ];
+        inc.creditAccountId = '';
+      });
+      expandedIncomeMore.add(inc.id);
+      renderIncomeRows(); renderRows(); renderSummary(); renderDashExpenses();
+    });
+  });
+  wrap.querySelectorAll('.split-exit').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      reconcileIncomeCredits(inc, ()=>{
+        const first = (inc.deposits && inc.deposits[0]) || {accountId:'', amount:0};
+        inc.creditAccountId = first.accountId || '';
+        inc.deposits = [];
+      });
+      renderIncomeRows(); renderRows(); renderSummary(); renderDashExpenses();
+    });
+  });
+  wrap.querySelectorAll('.split-add').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      if(!inc.deposits) inc.deposits = [];
+      inc.deposits.push({ id: uid(), accountId: '', amount: 0 });
+      saveData();
+      renderIncomeRows();
+    });
+  });
+  wrap.querySelectorAll('.split-del').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      reconcileIncomeCredits(inc, ()=>{
+        inc.deposits = (inc.deposits||[]).filter(d=>d.id!==el.dataset.split);
+      });
+      renderIncomeRows(); renderRows(); renderSummary(); renderDashExpenses();
+    });
+  });
+  wrap.querySelectorAll('.split-account').forEach(el=>{
+    el.addEventListener('change', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      const d = (inc.deposits||[]).find(x=>x.id===el.dataset.split);
+      if(!d) return;
+      reconcileIncomeCredits(inc, ()=>{ d.accountId = el.value || ''; });
+      renderIncomeRows(); renderRows(); renderSummary(); renderDashExpenses();
+    });
+  });
+  wrap.querySelectorAll('.split-amount').forEach(el=>{
+    el.addEventListener('input', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      const d = (inc.deposits||[]).find(x=>x.id===el.dataset.split);
+      if(!d) return;
+      reconcileIncomeCredits(inc, ()=>{ d.amount = Number(el.value)||0; });
+      updateSplitRemaining(inc.id);
+      renderRows(); renderSummary(); renderDashExpenses();
+    });
+  });
+  wrap.querySelectorAll('.split-fill').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      const d = (inc.deposits||[]).find(x=>x.id===el.dataset.split);
+      if(!d) return;
+      const others = (inc.deposits||[]).filter(x=>x.id!==d.id).reduce((s,x)=>s+(Number(x.amount)||0),0);
+      const remainder = Math.round(((Number(inc.amount)||0) - others) * 100) / 100;
+      reconcileIncomeCredits(inc, ()=>{ d.amount = remainder; });
+      renderIncomeRows(); renderRows(); renderSummary(); renderDashExpenses();
     });
   });
 }
@@ -3723,17 +3975,22 @@ function onEntryFieldChange(e, collection){
   } else if(field==='frequency'){
     item.frequency = e.target.value;
     item.recurring = e.target.value !== 'one-time';
-  } else if(field==='amount' && (collection==='expenses' || collection==='incomes')){
+  } else if(field==='amount' && collection==='expenses'){
     const prev = Number(item.amount)||0;
     const delta = (Number(e.target.value)||0) - prev;
     item.amount = Number(e.target.value)||0;
     const label = item.desc || item.category || 'Contribution';
     if(item.creditAccountId && delta) creditAsset(item.creditAccountId, delta, label);
     if(item.debitAccountId && delta) creditAsset(item.debitAccountId, -delta, label);
-  } else if(field==='creditAccountId' && (collection==='expenses' || collection==='incomes')){
+  } else if(field==='amount' && collection==='incomes'){
+    reconcileIncomeCredits(item, ()=>{ item.amount = Number(e.target.value)||0; });
+    updateSplitRemaining(item.id);
+  } else if(field==='creditAccountId' && collection==='expenses'){
     const prevAcc = item.creditAccountId || '';
     item.creditAccountId = e.target.value || '';
     applyExpenseCreditChange(item, item.amount, prevAcc, item.debitAccountId);
+  } else if(field==='creditAccountId' && collection==='incomes'){
+    reconcileIncomeCredits(item, ()=>{ item.creditAccountId = e.target.value || ''; });
   } else if(field==='debitAccountId' && collection==='expenses'){
     const prevDebit = item.debitAccountId || '';
     item.debitAccountId = e.target.value || '';
@@ -3918,6 +4175,20 @@ function currentMonthIncomes(){
   return (data.incomes||[]).filter(x=> monthKeyOf(x.date)===mk);
 }
 
+function splitRowHtml(incId, d){
+  return `
+    <div class="split-row" data-split="${d.id}">
+      <select class="split-account" data-id="${incId}" data-split="${d.id}">
+        <option value="">Choose account</option>
+        ${assetAccountOptions(d.accountId)}
+      </select>
+      <input type="number" class="split-amount" data-id="${incId}" data-split="${d.id}" value="${d.amount}" placeholder="0" step="0.01">
+      <button type="button" class="ghost split-fill" data-id="${incId}" data-split="${d.id}" title="Fill remaining amount">Fill</button>
+      <button type="button" class="split-del" data-id="${incId}" data-split="${d.id}" title="Remove">${ICON_X}</button>
+    </div>
+  `;
+}
+
 function renderIncomeRows(){
   const wrap = document.getElementById('incomeRows');
   if(!wrap) return;
@@ -3926,8 +4197,12 @@ function renderIncomeRows(){
   const mk = activeMonthKey();
   const sorted = [...data.incomes].filter(x=> monthKeyOf(x.date)===mk).sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   sorted.forEach(inc=>{
+    const hasSplit = inc.deposits && inc.deposits.length > 0;
+    const outer = document.createElement('div');
+    outer.className = 'income-entry-wrap';
     const row = document.createElement('div');
     row.className='entry-row';
+    if(expandedIncomeMore.has(inc.id)){ row.classList.add('open-more'); outer.classList.add('open-more'); }
     row.innerHTML = `
       <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(inc.desc)}" data-id="${inc.id}" data-field="desc">
       <input class="exp-date" type="date" value="${inc.date}" data-id="${inc.id}" data-field="date">
@@ -3940,14 +4215,41 @@ function renderIncomeRows(){
       <select class="exp-freq entry-more" data-id="${inc.id}" data-field="frequency">
         ${FREQ_OPTIONS.map(f=>`<option value="${f.value}" ${(inc.frequency||(inc.recurring?'monthly':'one-time'))===f.value?'selected':''}>${f.label}</option>`).join('')}
       </select>
+      ${hasSplit ? '' : `
       <select class="exp-credit entry-more" data-id="${inc.id}" data-field="creditAccountId" title="Deposits into account">
         <option value="">Deposits into: none</option>
         ${assetAccountOptions(inc.creditAccountId||'')}
       </select>
+      `}
     `;
-    wrap.appendChild(row);
+    outer.appendChild(row);
+
+    const toggleRow = document.createElement('div');
+    toggleRow.className = 'split-toggle-row entry-more';
+    toggleRow.innerHTML = hasSplit
+      ? `<button type="button" class="ghost split-exit" data-id="${inc.id}">← Use one account</button>`
+      : `<button type="button" class="ghost split-enter" data-id="${inc.id}">+ Split across accounts</button>`;
+    outer.appendChild(toggleRow);
+
+    if(hasSplit){
+      const panel = document.createElement('div');
+      panel.className = 'split-panel entry-more';
+      panel.id = 'splitpanel-' + inc.id;
+      panel.innerHTML = `
+        ${inc.deposits.map(d=>splitRowHtml(inc.id, d)).join('')}
+        <div class="split-footer">
+          <button type="button" class="ghost split-add" data-id="${inc.id}">+ Add account</button>
+          <span class="split-remaining" id="splitrem-${inc.id}"></span>
+        </div>
+      `;
+      outer.appendChild(panel);
+    }
+
+    wrap.appendChild(outer);
+    if(hasSplit) updateSplitRemaining(inc.id);
   });
   bindEntryEvents(wrap, 'incomes');
+  bindSplitEvents(wrap);
 }
 
 function renderIncomeSummary(){
