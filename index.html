@@ -1124,6 +1124,72 @@
     margin: 4px 0 10px; letter-spacing: -0.01em;
   }
 
+
+  /* Hierarchy: net worth is the only large number */
+  .summary .card:not(.net) .figure { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; }
+  .summary .card.net { padding: 22px 20px; }
+  .summary .card.net .figure { font-size: 36px; }
+  .summary-4 .card .figure { font-size: 22px; font-weight: 500; }
+  .summary-4 .card.net .figure { font-size: 28px; font-weight: 600; }
+
+  /* Holdings statement face */
+  .holding-row { display: block; padding: 0; }
+  .holding-face {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; background: none; border: none; color: inherit;
+    font-family: var(--font); text-align: left; cursor: pointer;
+    padding: 10px 8px; border-radius: 8px;
+  }
+  .holding-face:hover { background: var(--bg-input); }
+  .hf-name { font-size: 15px; font-weight: 500; color: var(--text); }
+  .hf-meta { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+  .hf-val { font-size: 15px; font-weight: 500; color: var(--text); white-space: nowrap; }
+  .holding-edit { display: none; padding: 0 8px 10px; }
+  .holding-row.open .holding-edit {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  }
+
+  /* Expense compact + more */
+  .entry-more { display: none; }
+  .entry-row.open-more .entry-more { display: contents; }
+  .entry-row .more-btn {
+    background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; font-size: 16px; min-width: 28px; min-height: 28px;
+    border-radius: 8px;
+  }
+  .entry-row .more-btn:hover, .entry-row.open-more .more-btn { color: var(--text); background: var(--bg-input); }
+
+  @media (max-width: 640px) {
+    .entry-row {
+      grid-template-areas:
+        "desc desc more del"
+        "date amount amount amount" !important;
+      grid-template-columns: 1fr 1fr 28px 28px !important;
+    }
+    .entry-row.open-more {
+      grid-template-areas:
+        "desc desc more del"
+        "date amount amount amount"
+        "cat freq freq freq"
+        "credit credit credit credit"
+        "debit debit debit debit" !important;
+    }
+    .entry-row .more-btn { grid-area: more; }
+  }
+
+  .mobile-topbar {
+    display: none;
+  }
+  @media (max-width: 640px) {
+    .mobile-topbar {
+      display: flex; justify-content: flex-end; gap: 8px;
+      margin: -4px 0 8px;
+    }
+    .mobile-settings { display: none !important; }
+    .fab { display: none; }
+    .fab.on-cashflow { display: flex; }
+  }
+
 </style>
 </head>
 <body>
@@ -1165,6 +1231,10 @@
 </nav>
 
 <div class="wrap">
+  <div class="mobile-topbar">
+    <button class="theme-toggle" id="themeToggleMobile" title="Toggle theme" type="button"><span>◐</span></button>
+    <button class="icon-btn" id="mobileHeaderSettings" title="Settings" type="button">⚙</button>
+  </div>
 
   <!-- ========== DASHBOARD ========== -->
   <div class="panel active" id="panel-dashboard" role="tabpanel">
@@ -2374,6 +2444,8 @@ function switchTab(tabId){
     bindPlannerInputs();
     renderPlanner();
   }
+  const fab = document.getElementById('fabBtn');
+  if(fab) fab.classList.toggle('on-cashflow', tabId === 'cashflow');
 }
 
 document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn=>{
@@ -2503,11 +2575,22 @@ function renderRows(){
       const acc = data.accounts.find(a=>a.id===el.dataset.acc);
       if(!acc) return;
       if(!acc.holdings) acc.holdings = [];
-      acc.holdings.push({id:uid(), name:'', ticker:'', units:0, value:0});
+      const nid = uid();
+      acc.holdings.push({id:nid, name:'', ticker:'', units:0, value:0});
       expandedAccounts.add(acc.id);
+      expandedHoldings.add(acc.id + ':' + nid);
       saveData();
       renderRows();
       renderSummary();
+    });
+  });
+  document.querySelectorAll('#assetsRows .holding-face').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const key = el.dataset.acc + ':' + el.dataset.hid;
+      if(expandedHoldings.has(key)) expandedHoldings.delete(key);
+      else expandedHoldings.add(key);
+      const row = el.closest('.holding-row');
+      if(row) row.classList.toggle('open', expandedHoldings.has(key));
     });
   });
   document.querySelectorAll('#assetsRows .holding-row input').forEach(el=>{
@@ -2740,16 +2823,33 @@ async function refreshAccountQuotes(accId){
   }
 }
 
+const expandedHoldings = new Set();
 function holdingRowHtml(accId, h){
   const px = (h.price || h.price===0) ? h.price : '';
+  const name = (h.name||'').trim() || (h.ticker||'').trim() || 'Untitled';
+  const units = Number(h.units)||0;
+  const price = Number(h.price)||0;
+  let meta = (h.ticker||'').toUpperCase();
+  if(units && price) meta = (meta ? meta + ' · ' : '') + units + ' × ' + fmt(price);
+  else if(units) meta = (meta ? meta + ' · ' : '') + units + ' sh';
+  const open = expandedHoldings.has(accId + ':' + h.id) ? 'open' : '';
   return `
-    <div class="holding-row">
-      <input class="h-name" value="${escapeHtml(h.name||'')}" placeholder="Name" data-acc="${accId}" data-hid="${h.id}" data-hfield="name">
-      <input class="h-ticker" value="${escapeHtml(h.ticker||'')}" placeholder="Ticker" data-acc="${accId}" data-hid="${h.id}" data-hfield="ticker">
-      <input class="h-units" type="number" value="${h.units||0}" placeholder="Shares" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="units">
-      <input class="h-price" type="number" value="${px}" placeholder="Price" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="price" title="Last price">
-      <input class="h-value" type="number" value="${h.value||0}" placeholder="Value" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="value">
-      <button class="del" data-acc="${accId}" data-hid="${h.id}" title="Remove">✕</button>
+    <div class="holding-row ${open}" data-acc="${accId}" data-hid="${h.id}">
+      <button type="button" class="holding-face" data-acc="${accId}" data-hid="${h.id}">
+        <div>
+          <div class="hf-name">${escapeHtml(name)}</div>
+          <div class="hf-meta">${escapeHtml(meta || 'Tap to edit')}</div>
+        </div>
+        <div class="hf-val">${fmt(Number(h.value)||0)}</div>
+      </button>
+      <div class="holding-edit">
+        <input class="h-name" value="${escapeHtml(h.name||'')}" placeholder="Name" data-acc="${accId}" data-hid="${h.id}" data-hfield="name">
+        <input class="h-ticker" value="${escapeHtml(h.ticker||'')}" placeholder="Ticker" data-acc="${accId}" data-hid="${h.id}" data-hfield="ticker">
+        <input class="h-units" type="number" value="${h.units||0}" placeholder="Shares" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="units">
+        <input class="h-price" type="number" value="${px}" placeholder="Price" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="price" title="Last price">
+        <input class="h-value" type="number" value="${h.value||0}" placeholder="Value" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="value">
+        <button class="del" data-acc="${accId}" data-hid="${h.id}" title="Remove">✕</button>
+      </div>
     </div>
   `;
 }
@@ -3068,24 +3168,25 @@ function renderExpenseRows(){
     const row = document.createElement('div');
     row.className='entry-row';
     row.innerHTML = `
+      <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(exp.desc)}" data-id="${exp.id}" data-field="desc">
       <input class="exp-date" type="date" value="${exp.date}" data-id="${exp.id}" data-field="date">
-      <select class="exp-cat" data-id="${exp.id}" data-field="category">
+      <input class="exp-amount" type="number" value="${exp.amount}" data-id="${exp.id}" data-field="amount">
+      <button type="button" class="more-btn" title="More">···</button>
+      <button class="del" data-id="${exp.id}" title="Remove">✕</button>
+      <select class="exp-cat entry-more" data-id="${exp.id}" data-field="category">
         ${EXPENSE_CATS.map(c=>`<option value="${c}" ${c===exp.category?'selected':''}>${c}</option>`).join('')}
       </select>
-      <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(exp.desc)}" data-id="${exp.id}" data-field="desc">
-      <input class="exp-amount" type="number" value="${exp.amount}" data-id="${exp.id}" data-field="amount">
-      <select class="exp-freq" data-id="${exp.id}" data-field="frequency">
+      <select class="exp-freq entry-more" data-id="${exp.id}" data-field="frequency">
         ${FREQ_OPTIONS.map(f=>`<option value="${f.value}" ${(exp.frequency||(exp.recurring?'monthly':'one-time'))===f.value?'selected':''}>${f.label}</option>`).join('')}
       </select>
-      <select class="exp-credit" data-id="${exp.id}" data-field="creditAccountId" title="Pays into account">
+      <select class="exp-credit entry-more" data-id="${exp.id}" data-field="creditAccountId" title="Pays into account">
         <option value="">Pays into: none</option>
         ${assetAccountOptions(exp.creditAccountId||'')}
       </select>
-      <select class="exp-debit" data-id="${exp.id}" data-field="debitAccountId" title="Paid from account">
+      <select class="exp-debit entry-more" data-id="${exp.id}" data-field="debitAccountId" title="Paid from account">
         <option value="">Paid from: none</option>
         ${assetAccountOptions(exp.debitAccountId||'')}
       </select>
-      <button class="del" data-id="${exp.id}" title="Remove">✕</button>
     `;
     wrap.appendChild(row);
   });
@@ -3102,6 +3203,12 @@ function bindEntryEvents(wrap, collection){
   wrap.querySelectorAll('.del').forEach(el=>{
     el.addEventListener('click', ()=>{
       softDelete(collection, el.dataset.id, collection==='expenses' ? 'Expense deleted' : 'Income deleted');
+    });
+  });
+  wrap.querySelectorAll('.more-btn').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const row = el.closest('.entry-row');
+      if(row) row.classList.toggle('open-more');
     });
   });
 }
@@ -3317,16 +3424,17 @@ function renderIncomeRows(){
     const row = document.createElement('div');
     row.className='entry-row';
     row.innerHTML = `
+      <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(inc.desc)}" data-id="${inc.id}" data-field="desc">
       <input class="exp-date" type="date" value="${inc.date}" data-id="${inc.id}" data-field="date">
-      <select class="exp-cat" data-id="${inc.id}" data-field="category">
+      <input class="exp-amount" type="number" value="${inc.amount}" data-id="${inc.id}" data-field="amount">
+      <button type="button" class="more-btn" title="More">···</button>
+      <button class="del" data-id="${inc.id}" title="Remove">✕</button>
+      <select class="exp-cat entry-more" data-id="${inc.id}" data-field="category">
         ${INCOME_CATS.map(c=>`<option value="${c}" ${c===inc.category?'selected':''}>${c}</option>`).join('')}
       </select>
-      <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(inc.desc)}" data-id="${inc.id}" data-field="desc">
-      <input class="exp-amount" type="number" value="${inc.amount}" data-id="${inc.id}" data-field="amount">
-      <select class="exp-freq" data-id="${inc.id}" data-field="frequency">
+      <select class="exp-freq entry-more" data-id="${inc.id}" data-field="frequency">
         ${FREQ_OPTIONS.map(f=>`<option value="${f.value}" ${(inc.frequency||(inc.recurring?'monthly':'one-time'))===f.value?'selected':''}>${f.label}</option>`).join('')}
       </select>
-      <button class="del" data-id="${inc.id}" title="Remove">✕</button>
     `;
     wrap.appendChild(row);
   });
@@ -3599,6 +3707,10 @@ function closeSettings(){
 }
 
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
+const _ms = document.getElementById('mobileHeaderSettings');
+if(_ms) _ms.addEventListener('click', openSettings);
+const _tm = document.getElementById('themeToggleMobile');
+if(_tm) _tm.addEventListener('click', ()=> document.getElementById('themeToggle') && document.getElementById('themeToggle').click());
 document.getElementById('mobileSettingsBtn').addEventListener('click', openSettings);
 document.getElementById('settingsCancel').addEventListener('click', closeSettings);
 
