@@ -25,6 +25,8 @@
     --green-soft: rgba(48,209,88,0.14);
     --red: #ff453a;
     --red-soft: rgba(255,69,58,0.14);
+    --amber: #ff9f0a;
+    --amber-soft: rgba(255,159,10,0.14);
     --orange: #ff9f0a;
     --radius: 12px;
     --radius-sm: 8px;
@@ -53,6 +55,8 @@
     --green-soft: rgba(40,167,69,0.1);
     --red: #e0342a;
     --red-soft: rgba(224,52,42,0.1);
+    --amber: #d97b06;
+    --amber-soft: rgba(217,123,6,0.1);
     --orange: #ff9500;
     --shadow: 0 8px 24px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
   }
@@ -261,6 +265,30 @@
     padding-left: 14px; position: relative;
   }
   .insight-more-item::before { content: '–'; position: absolute; left: 0; color: var(--text-tertiary); }
+
+  /* Goal health rings */
+  .goals-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    margin-bottom: 10px;
+  }
+  .goal-card {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    background: var(--bg-card); border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+    border-radius: var(--radius); padding: 18px 12px 16px; box-shadow: var(--shadow);
+  }
+  .goal-card .ring-svg { margin-bottom: 10px; }
+  .goal-card .goal-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .goal-card .goal-detail { font-size: 11.5px; color: var(--text-tertiary); line-height: 1.4; }
+  .goals-toggle-row { text-align: center; margin-bottom: 20px; }
+  #dashDetails { animation: detailsFadeIn 180ms ease; }
+  @keyframes detailsFadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  @media (max-width: 640px) {
+    .goals-row { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .goal-card { padding: 14px 6px 12px; }
+    .goal-card .ring-svg svg { width: 48px; height: 48px; }
+    .goal-card .goal-label { font-size: 11.5px; }
+    .goal-card .goal-detail { display: none; }
+  }
   @media (max-width: 640px) {
     .summary { grid-template-columns: 1fr; gap: 10px; }
   }
@@ -1320,83 +1348,90 @@
       </div>
     </div>
 
-    <div class="insight-line" id="dashInsight" style="display:none;">
-      <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 2l1.8 4.9L17 8.5l-4.5 2.6L11 16l-1-4.9-4.5-2.6L10.7 6.9 10 2z" fill="currentColor"/></svg>
-      <span id="dashInsightText"></span>
-    </div>
-    <button type="button" id="dashInsightMoreToggle" class="insight-more-toggle" style="display:none;"></button>
-    <div id="dashInsightMoreList" class="insight-more-list" style="display:none;"></div>
-
-    <div class="summary">
-      <div class="card net">
-        <div class="label">Net Worth</div>
-        <div class="figure" id="netWorthFig">$0</div>
-        <div class="delta" id="netDelta"></div>
-      </div>
-      <div class="card assets">
-        <div class="label">Assets</div>
-        <div class="figure" id="assetsFig">$0</div>
-      </div>
-      <div class="card liabilities">
-        <div class="label">Liabilities</div>
-        <div class="figure" id="liabFig">$0</div>
-      </div>
+    <div class="goals-row" id="goalsRow"></div>
+    <div class="goals-toggle-row">
+      <button type="button" id="dashDetailsToggle" class="insight-more-toggle">Show the numbers</button>
     </div>
 
-    <div class="summary summary-2" style="margin-bottom:20px;">
-      <div class="card cashflow">
-        <div class="label">Net Cash Flow · This Month</div>
-        <div class="figure" id="dashCashFlow">$0</div>
+    <div id="dashDetails" style="display:none;">
+      <div class="insight-line" id="dashInsight" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 2l1.8 4.9L17 8.5l-4.5 2.6L11 16l-1-4.9-4.5-2.6L10.7 6.9 10 2z" fill="currentColor"/></svg>
+        <span id="dashInsightText"></span>
       </div>
-      <div class="card">
-        <div class="label">Income / Expenses</div>
-        <div class="figure" style="font-size:17px;display:flex;gap:10px;align-items:baseline;font-weight:600;">
-          <span style="color:var(--green);" id="dashIncome">$0</span>
-          <span style="color:var(--text-tertiary);font-weight:400;">/</span>
-          <span style="color:var(--red);" id="dashExpense">$0</span>
+      <button type="button" id="dashInsightMoreToggle" class="insight-more-toggle" style="display:none;"></button>
+      <div id="dashInsightMoreList" class="insight-more-list" style="display:none;"></div>
+
+      <div class="summary">
+        <div class="card net">
+          <div class="label">Net Worth</div>
+          <div class="figure" id="netWorthFig">$0</div>
+          <div class="delta" id="netDelta"></div>
+        </div>
+        <div class="card assets">
+          <div class="label">Assets</div>
+          <div class="figure" id="assetsFig">$0</div>
+        </div>
+        <div class="card liabilities">
+          <div class="label">Liabilities</div>
+          <div class="figure" id="liabFig">$0</div>
         </div>
       </div>
-    </div>
 
-    <div class="chart-card">
-      <h2>Net Worth History</h2>
-      <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
-      <div class="empty-note" id="chartEmpty" style="display:none;">No snapshots yet — go to Accounts and save a snapshot.</div>
-    </div>
-
-    <div class="dash-grid">
-      <div class="section">
-        <div style="display:flex;align-items:center;margin-bottom:14px;">
-          <h2 style="margin:0;">This Month</h2>
-          <button class="section-link" data-goto="cashflow">View all</button>
+      <div class="summary summary-2" style="margin-bottom:20px;">
+        <div class="card cashflow">
+          <div class="label">Net Cash Flow · This Month</div>
+          <div class="figure" id="dashCashFlow">$0</div>
         </div>
-        <div class="summary summary-4" style="margin-bottom:0;">
-          <div class="card income" style="padding:14px 16px;">
-            <div class="label">Income</div>
-            <div class="figure" id="dashIncMonth" style="font-size:20px;">$0</div>
-          </div>
-          <div class="card expense" style="padding:14px 16px;">
-            <div class="label">Spent</div>
-            <div class="figure" id="dashExpMonth" style="font-size:20px;">$0</div>
-          </div>
-          <div class="card" style="padding:14px 16px;">
-            <div class="label">Top Exp</div>
-            <div class="figure" id="dashExpTop" style="font-size:14px;font-weight:500;">—</div>
-          </div>
-          <div class="card" style="padding:14px 16px;">
-            <div class="label">Txns</div>
-            <div class="figure" id="dashTxnCount" style="font-size:20px;">0</div>
+        <div class="card">
+          <div class="label">Income / Expenses</div>
+          <div class="figure" style="font-size:17px;display:flex;gap:10px;align-items:baseline;font-weight:600;">
+            <span style="color:var(--green);" id="dashIncome">$0</span>
+            <span style="color:var(--text-tertiary);font-weight:400;">/</span>
+            <span style="color:var(--red);" id="dashExpense">$0</span>
           </div>
         </div>
       </div>
 
-      <div class="section">
-        <div style="display:flex;align-items:center;margin-bottom:14px;">
-          <h2 style="margin:0;">Recurring</h2>
-          <button class="section-link" data-goto="cashflow">Manage</button>
+      <div class="chart-card">
+        <h2>Net Worth History</h2>
+        <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
+        <div class="empty-note" id="chartEmpty" style="display:none;">No snapshots yet — go to Accounts and save a snapshot.</div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="section">
+          <div style="display:flex;align-items:center;margin-bottom:14px;">
+            <h2 style="margin:0;">This Month</h2>
+            <button class="section-link" data-goto="cashflow">View all</button>
+          </div>
+          <div class="summary summary-4" style="margin-bottom:0;">
+            <div class="card income" style="padding:14px 16px;">
+              <div class="label">Income</div>
+              <div class="figure" id="dashIncMonth" style="font-size:20px;">$0</div>
+            </div>
+            <div class="card expense" style="padding:14px 16px;">
+              <div class="label">Spent</div>
+              <div class="figure" id="dashExpMonth" style="font-size:20px;">$0</div>
+            </div>
+            <div class="card" style="padding:14px 16px;">
+              <div class="label">Top Exp</div>
+              <div class="figure" id="dashExpTop" style="font-size:14px;font-weight:500;">—</div>
+            </div>
+            <div class="card" style="padding:14px 16px;">
+              <div class="label">Txns</div>
+              <div class="figure" id="dashTxnCount" style="font-size:20px;">0</div>
+            </div>
+          </div>
         </div>
-        <div class="mini-list" id="dashRecurring"></div>
-        <div class="empty-note" id="dashRecurringEmpty" style="display:none;padding:24px 0;">No recurring items yet.</div>
+
+        <div class="section">
+          <div style="display:flex;align-items:center;margin-bottom:14px;">
+            <h2 style="margin:0;">Recurring</h2>
+            <button class="section-link" data-goto="cashflow">Manage</button>
+          </div>
+          <div class="mini-list" id="dashRecurring"></div>
+          <div class="empty-note" id="dashRecurringEmpty" style="display:none;padding:24px 0;">No recurring items yet.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1754,6 +1789,37 @@ const ICON_CHEVRON_DOWN = '<svg width="9" height="9" viewBox="0 0 10 10" fill="n
 const ICON_MORE = '<svg width="15" height="4" viewBox="0 0 16 4" fill="currentColor"><circle cx="2" cy="2" r="1.6"/><circle cx="8" cy="2" r="1.6"/><circle cx="14" cy="2" r="1.6"/></svg>';
 const ICON_SUN = '<svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 1.5v2M10 16.5v2M18.5 10h-2M3.5 10h-2M15.6 4.4l-1.4 1.4M5.8 14.2l-1.4 1.4M15.6 15.6l-1.4-1.4M5.8 5.8L4.4 4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 const ICON_MOON = '<svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 108 8 6.5 6.5 0 01-8-8z"/></svg>';
+
+/** A "closed ring" health indicator, colored by state.
+    green = fully closed ring + checkmark. amber = closed ring + a small pending dot.
+    red = ring shown open (a gap) + a small alert mark — so the state reads
+    even without color (shape carries the same meaning as the color). */
+function ringSvg(state){
+  const r = 26, cx = 32, cy = 32, sw = 5;
+  const circumference = 2 * Math.PI * r;
+  const color = state === 'green' ? 'var(--green)' : state === 'amber' ? 'var(--amber)' : 'var(--red)';
+  const gap = state === 'red' ? circumference * 0.16 : 0;
+  const dash = circumference - gap;
+  let center = '';
+  if(state === 'green'){
+    center = '<path d="M23 33l6 6 12-13" stroke="var(--green)" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+  } else if(state === 'amber'){
+    center = '<circle cx="32" cy="32" r="4.5" fill="var(--amber)"/>';
+  } else {
+    center = '<path d="M32 22v14" stroke="var(--red)" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="32" cy="42" r="2.4" fill="var(--red)"/>';
+  }
+  return `
+    <div class="ring-svg">
+      <svg width="60" height="60" viewBox="0 0 64 64">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${sw}"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}"
+          stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+          stroke-dasharray="${dash} ${circumference}"/>
+        ${center}
+      </svg>
+    </div>
+  `;
+}
 const STORAGE_KEY = 'ledger-networth-v1';
 const THEME_KEY = 'ledger-theme';
 const SYNC_CFG_KEY = 'ledger-sync-cfg';
@@ -2059,7 +2125,8 @@ function fmt(n){
 
 function accountBalance(acc){
   if(acc.type === 'asset' && acc.holdings && acc.holdings.length){
-    return acc.holdings.reduce((s,h)=> s + (Number(h.value)||0), 0);
+    const sum = acc.holdings.reduce((s,h)=> s + (Number(h.value)||0), 0);
+    return Math.round(sum * 100) / 100;
   }
   return Number(acc.balance)||0;
 }
@@ -2971,8 +3038,7 @@ function updateHoldingsSum(acc){
     el.textContent = '';
     return;
   }
-  const sum = acc.holdings.reduce((s,h)=> s + (Number(h.value)||0), 0);
-  el.textContent = acc.holdings.length + ' holding' + (acc.holdings.length===1?'':'s') + ' · ' + fmt(sum);
+  el.textContent = acc.holdings.length + ' holding' + (acc.holdings.length===1?'':'s') + ' · ' + fmt(accountBalance(acc));
   el.className = 'holdings-sum';
 }
 
@@ -3174,6 +3240,17 @@ function shiftMonthKey(mk, delta){
 }
 let cfMonth = currentMonthKey();
 function activeMonthKey(){ return cfMonth || currentMonthKey(); }
+
+/** Date to use for a newly-added entry: today if you're viewing the current
+    month, otherwise the 1st of whichever month you're currently looking at —
+    so the new row actually shows up in the list you're looking at instead of
+    silently landing in a different month. */
+function dateForActiveMonth(){
+  const todayFull = new Date().toISOString().slice(0,10);
+  const mk = activeMonthKey();
+  if(mk === todayFull.slice(0,7)) return todayFull;
+  return mk + '-01';
+}
 
 function categoryTotals(list){
   const byCat = {};
@@ -3707,6 +3784,72 @@ function allFindings(){
   ].filter(Boolean).sort((a,b)=> b.severity - a.severity);
 }
 
+/* ============ Goal Health Rings ============ */
+/* Each goal: { id, label, state: 'green'|'amber'|'red', detail: <one-line explanation> }.
+   Rules are intentionally simple and computed entirely from data already on hand —
+   no separate goal-setup step required to get a useful answer. */
+function goalBillsCovered(){
+  const bills = recurringMonthlyTotal('expenses');
+  const recurringIncome = recurringMonthlyTotal('incomes');
+  const income = recurringIncome > 0 ? recurringIncome : monthCollectionTotal('incomes', currentMonthKey());
+  if(bills < 1){
+    return { id:'bills', label:'Bills covered', state:'green', detail:'No recurring bills tracked yet.' };
+  }
+  if(income >= bills){
+    return { id:'bills', label:'Bills covered', state:'green', detail:`Income covers your ${fmt(bills)}/mo in bills.` };
+  }
+  if(income >= bills * 0.9){
+    return { id:'bills', label:'Bills covered', state:'amber', detail:`${fmt(bills - income)} short of covering bills this month.` };
+  }
+  return { id:'bills', label:'Bills covered', state:'red', detail:`${fmt(bills - income)} short of your ${fmt(bills)}/mo in bills.` };
+}
+
+function goalSavingExtra(){
+  const mk = currentMonthKey();
+  const monthExp = data.expenses.filter(x=>monthKeyOf(x.date)===mk);
+  const expTotal = monthExp.reduce((s,x)=>s+(Number(x.amount)||0),0);
+  const incTotal = monthCollectionTotal('incomes', mk);
+  const net = incTotal - expTotal;
+  const savings = monthExp.filter(x=>(x.category||'').trim()==='Savings & Investments').reduce((s,x)=>s+(Number(x.amount)||0),0);
+  if(net < 0){
+    return { id:'saving', label:'Saving the extra', state:'red', detail:`Spending is ${fmt(Math.abs(net))} ahead of income this month.` };
+  }
+  if(savings > 0){
+    return { id:'saving', label:'Saving the extra', state:'green', detail:`${fmt(savings)} went to savings/investments this month.` };
+  }
+  return { id:'saving', label:'Saving the extra', state:'amber', detail:`Not overspending, but nothing earmarked for savings yet.` };
+}
+
+function goalNoRedFlags(){
+  const findings = allFindings();
+  const urgent = findings.filter(f=>f.severity===3);
+  const notable = findings.filter(f=>f.severity===2);
+  if(urgent.length){
+    return { id:'flags', label:'No red flags', state:'red', detail: urgent[0].text };
+  }
+  if(notable.length){
+    return { id:'flags', label:'No red flags', state:'amber', detail: notable[0].text };
+  }
+  return { id:'flags', label:'No red flags', state:'green', detail:'Nothing urgent right now.' };
+}
+
+function allGoals(){
+  return [goalBillsCovered(), goalSavingExtra(), goalNoRedFlags()];
+}
+
+function renderGoals(){
+  const wrap = document.getElementById('goalsRow');
+  if(!wrap) return;
+  const goals = allGoals();
+  wrap.innerHTML = goals.map(g => `
+    <div class="goal-card">
+      ${ringSvg(g.state)}
+      <div class="goal-label">${escapeHtml(g.label)}</div>
+      <div class="goal-detail">${escapeHtml(g.detail)}</div>
+    </div>
+  `).join('');
+}
+
 /* ---- Freshness memory: avoid repeating the same non-urgent finding
    verbatim day after day once something else is available to say.
    Urgent (severity 3) findings are exempt — they should keep surfacing
@@ -3761,6 +3904,7 @@ function updateInsight(boxId, textId, text, warn){
 
 /** Renders the Dashboard headline finding + a collapsed list of everything else. */
 function renderDashFindings(){
+  renderGoals();
   const findings = allFindings();
   pruneFindingsMemory(findings);
   const head = pickBest(findings);
@@ -3848,15 +3992,22 @@ document.querySelectorAll('.add-row[data-type]').forEach(btn=>{
   });
 });
 
+document.getElementById('dashDetailsToggle').addEventListener('click', ()=>{
+  const panel = document.getElementById('dashDetails');
+  const btn = document.getElementById('dashDetailsToggle');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  btn.textContent = opening ? 'Hide the numbers' : 'Show the numbers';
+  if(opening) renderChart(); // Chart.js needs a real size to lay out, so redraw now that it's visible
+});
+
 document.getElementById('addExpenseBtn').addEventListener('click', ()=>{
-  const today = new Date().toISOString().slice(0,10);
-  data.expenses.push({id:uid(), date:today, category:EXPENSE_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time', creditAccountId:''});
+  data.expenses.push({id:uid(), date:dateForActiveMonth(), category:EXPENSE_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time', creditAccountId:''});
   saveData(); renderExpenseAll();
 });
 
 document.getElementById('addIncomeBtn').addEventListener('click', ()=>{
-  const today = new Date().toISOString().slice(0,10);
-  data.incomes.push({id:uid(), date:today, category:INCOME_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time'});
+  data.incomes.push({id:uid(), date:dateForActiveMonth(), category:INCOME_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time'});
   saveData(); renderIncomeAll();
 });
 
@@ -3916,7 +4067,7 @@ function openModal(preType){
     b.classList.toggle('active', b.dataset.mtype === modalType);
   });
   fillModalCats();
-  document.getElementById('mDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('mDate').value = dateForActiveMonth();
   document.getElementById('mDesc').value = '';
   document.getElementById('mAmount').value = '';
   const mf = document.getElementById('mFreq'); if(mf) mf.value = 'one-time';
