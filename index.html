@@ -900,6 +900,19 @@
     cursor: pointer; font-size: 14px; padding: 4px 6px;
   }
   .holding-row .del:hover { color: var(--red); }
+  .wallet-connect-row {
+    display: flex; gap: 8px; padding: 10px 8px 0; align-items: center; flex-wrap: wrap;
+  }
+  .wallet-connect-row .wallet-address {
+    flex: 1; min-width: 0; font-family: var(--mono); font-size: 12.5px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 9px 10px; color: var(--text);
+  }
+  .wallet-connect-row .wallet-address:focus { outline: none; border-color: var(--accent); }
+  .wallet-connect-row .refresh-wallet { flex-shrink: 0; }
+  .wallet-hint {
+    font-size: 11px; color: var(--text-tertiary); padding: 6px 8px 2px; line-height: 1.4;
+  }
   .add-holding {
     margin: 8px; background: none; border: 1px dashed var(--border-strong);
     color: var(--text-secondary); font-family: var(--font); font-size: 12px;
@@ -1747,6 +1760,13 @@
       <div class="settings-hint">Needed for stocks (AAPL, NVDA, etc.). Get a free key at finnhub.io/register. Crypto does not need this.</div>
     </div>
 
+    <h4 class="settings-heading">Crypto wallets</h4>
+    <div class="settings-field">
+      <label>Alchemy API key</label>
+      <input type="text" id="alchemyKey" placeholder="Alchemy API key" autocomplete="off" spellcheck="false">
+      <div class="settings-hint">Needed to read Base wallet balances. Get a free key at alchemy.com — create an app on the Base network and copy its API key. Ledger only ever reads a public wallet address; it never asks for a private key or seed phrase.</div>
+    </div>
+
     <div class="settings-row">
       <label>Cloud sync</label>
       <div class="toggle" id="syncToggle" role="switch" aria-checked="false"></div>
@@ -1839,6 +1859,8 @@ const STORAGE_KEY = 'ledger-networth-v1';
 const THEME_KEY = 'ledger-theme';
 const SYNC_CFG_KEY = 'ledger-sync-cfg';
 const QUOTE_KEY = 'ledger-quote-key';
+const ALCHEMY_KEY = 'ledger-alchemy-key';
+const BASE_CHAIN_ID = 8453;
 const ASSET_CATS = ['Cash','Investments','Stocks','Blockchain','Retirement','Real Estate','Vehicles','Other'];
 const LIAB_CATS = ['Credit Card','Loan','Mortgage','Other'];
 const EXPENSE_CATS = ['Housing','Utilities','Groceries','Dining','Transportation','Insurance','Healthcare','Entertainment','Shopping','Subscriptions','Travel','Education','Personal Care','Debt Payment','Savings & Investments','Gifts & Donations','Other'];
@@ -2712,14 +2734,25 @@ function renderRows(){
           <button class="del" data-id="${acc.id}" title="Remove">${ICON_X}</button>
         </div>
         <div class="holdings-panel ${isOpen?'open':''}" id="holdings-${acc.id}">
+          ${acc.category === 'Blockchain' ? `
+            <div class="wallet-connect-row">
+              <input type="text" class="wallet-address" id="waddr-${acc.id}" data-acc="${acc.id}"
+                placeholder="0x… Base wallet address" value="${escapeHtml(acc.walletAddress||'')}" spellcheck="false" autocomplete="off">
+              <button class="ghost refresh-wallet" data-acc="${acc.id}" type="button">Refresh wallet</button>
+            </div>
+            <div class="wallet-hint">Reads your public Base address only — never asks for a private key or seed phrase.</div>
+            <span class="quote-status" id="wstat-${acc.id}"></span>
+          ` : ''}
           ${acc.holdings.map(h=> holdingRowHtml(acc.id, h)).join('')}
           <div class="holdings-sum" id="hsum-${acc.id}"></div>
+          ${acc.category === 'Blockchain' ? '' : `
           <div class="holdings-toolbar">
             <button class="add-holding" data-acc="${acc.id}" style="width:auto;margin:0;">+ Add holding</button>
             <button class="ghost refresh-quotes" data-acc="${acc.id}" type="button">Refresh prices</button>
             <button class="ghost quote-key-btn" type="button">Stock API key</button>
             <span class="quote-status" id="qstat-${acc.id}"></span>
           </div>
+          `}
         </div>
       `;
       aWrap.appendChild(block);
@@ -2769,6 +2802,18 @@ function renderRows(){
   });
   document.querySelectorAll('#assetsRows .refresh-quotes').forEach(el=>{
     el.addEventListener('click', ()=> refreshAccountQuotes(el.dataset.acc));
+  });
+  document.querySelectorAll('#assetsRows .refresh-wallet').forEach(el=>{
+    el.addEventListener('click', ()=> refreshWalletHoldings(el.dataset.acc));
+  });
+  document.querySelectorAll('#assetsRows .wallet-address').forEach(el=>{
+    el.addEventListener('blur', ()=>{
+      const acc = data.accounts.find(a=>a.id===el.dataset.acc);
+      if(!acc) return;
+      acc.walletAddress = el.value.trim();
+      saveData();
+    });
+    el.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); refreshWalletHoldings(el.dataset.acc); } });
   });
   document.querySelectorAll('#assetsRows .add-holding').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -2887,6 +2932,10 @@ function getQuoteKey(){
   try { return (localStorage.getItem(QUOTE_KEY) || '').trim(); }
   catch(e){ return ''; }
 }
+function getAlchemyKey(){
+  try { return (localStorage.getItem(ALCHEMY_KEY) || '').trim(); }
+  catch(e){ return ''; }
+}
 
 async function fetchFinnhubPrice(ticker, key){
   const sym = normalizeTicker(ticker).replace(/-USD$/,'');
@@ -2964,6 +3013,133 @@ async function fetchGeckoPricesByIds(ids){
     return await res.json();
   }catch(e){ return {}; }
 }
+
+async function fetchGeckoPricesByContracts(addresses){
+  if(!addresses.length) return {};
+  try{
+    const url = 'https://api.coingecko.com/api/v3/simple/token_price/base?contract_addresses=' +
+      encodeURIComponent(addresses.join(',')) + '&vs_currencies=usd';
+    const res = await fetch(url, { cache: 'no-store' });
+    if(!res.ok) return {};
+    return await res.json();
+  }catch(e){ return {}; }
+}
+
+async function alchemyRpc(method, params){
+  const key = getAlchemyKey();
+  if(!key) throw new Error('no-key');
+  const url = 'https://base-mainnet.g.alchemy.com/v2/' + encodeURIComponent(key);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc:'2.0', id:1, method, params })
+  });
+  if(!res.ok) throw new Error('http-' + res.status);
+  const json = await res.json();
+  if(json.error) throw new Error(json.error.message || 'rpc-error');
+  return json.result;
+}
+
+/** Reads a public Base-network wallet address (never a private key) and
+    returns holdings in the same {name, ticker, units, price, value} shape
+    the existing stock-holdings UI already knows how to render. */
+async function fetchBaseWalletHoldings(address){
+  if(!/^0x[a-fA-F0-9]{40}$/.test(address||'')) throw new Error('Enter a valid 0x wallet address');
+  if(!getAlchemyKey()) throw new Error('Add a free Alchemy API key in Settings');
+
+  const holdings = [];
+
+  // Native ETH balance
+  const weiHex = await alchemyRpc('eth_getBalance', [address, 'latest']);
+  const ethUnits = parseInt(weiHex, 16) / 1e18;
+  if(ethUnits > 0.00001){
+    holdings.push({ id: uid(), name: 'Ethereum (Base)', ticker: 'ETH', units: ethUnits, price: 0, value: 0 });
+  }
+
+  // ERC-20 token balances
+  const tb = await alchemyRpc('alchemy_getTokenBalances', [address]);
+  let tokens = (tb && tb.tokenBalances || [])
+    .filter(t => t.tokenBalance && parseInt(t.tokenBalance, 16) > 0);
+
+  // Cap how many we look up in detail — avoids hammering the API for wallets
+  // full of dust/spam-airdrop tokens.
+  tokens.sort((a,b) => parseInt(b.tokenBalance,16) - parseInt(a.tokenBalance,16));
+  tokens = tokens.slice(0, 40);
+
+  const metas = await Promise.all(tokens.map(t =>
+    alchemyRpc('alchemy_getTokenMetadata', [t.contractAddress]).catch(()=>null)
+  ));
+
+  const tokenEntries = [];
+  tokens.forEach((t, i) => {
+    const meta = metas[i];
+    if(!meta || meta.decimals == null) return;
+    const units = parseInt(t.tokenBalance, 16) / Math.pow(10, meta.decimals);
+    if(units <= 0) return;
+    tokenEntries.push({
+      id: uid(),
+      contract: t.contractAddress,
+      name: meta.name || meta.symbol || 'Token',
+      ticker: meta.symbol || '?',
+      units, price: 0, value: 0
+    });
+  });
+
+  // Prices: native ETH via CoinGecko id, tokens via CoinGecko contract lookup
+  const [ethPriceRes, tokenPrices] = await Promise.all([
+    fetchGeckoPricesByIds(['ethereum']),
+    fetchGeckoPricesByContracts(tokenEntries.map(e=>e.contract))
+  ]);
+  const ethPrice = ethPriceRes.ethereum && ethPriceRes.ethereum.usd;
+  holdings.forEach(h=>{
+    if(h.ticker === 'ETH' && ethPrice){
+      h.price = ethPrice;
+      h.value = Math.round(h.units * ethPrice * 100) / 100;
+    }
+  });
+  tokenEntries.forEach(e=>{
+    const entry = tokenPrices[e.contract.toLowerCase()];
+    const px = entry && entry.usd;
+    delete e.contract;
+    if(px){
+      e.price = px;
+      e.value = Math.round(e.units * px * 100) / 100;
+      holdings.push(e); // only keep tokens CoinGecko can actually price — filters out spam/dust airdrops
+    }
+  });
+
+  return holdings;
+}
+
+async function refreshWalletHoldings(accId){
+  const acc = data.accounts.find(a=>a.id===accId);
+  if(!acc) return;
+  const addrInput = document.getElementById('waddr-' + accId);
+  let status = document.getElementById('wstat-' + accId);
+  const address = (addrInput ? addrInput.value : acc.walletAddress || '').trim();
+  acc.walletAddress = address;
+  saveData();
+
+  if(status){ status.textContent = 'Fetching from Base…'; status.style.color = 'var(--text-tertiary)'; }
+  try{
+    const holdings = await fetchBaseWalletHoldings(address);
+    acc.holdings = holdings;
+    acc.balance = accountBalance(acc);
+    saveData();
+    renderRows();
+    renderSummary();
+    renderTallies();
+    // renderRows() rebuilt the DOM, so the earlier status reference is now detached — re-query it
+    status = document.getElementById('wstat-' + accId);
+    if(status){
+      status.textContent = holdings.length ? `Updated · ${holdings.length} token${holdings.length===1?'':'s'} found` : 'Wallet is empty on Base';
+      status.style.color = 'var(--green)';
+    }
+  }catch(e){
+    if(status){ status.textContent = e.message || 'Could not fetch wallet'; status.style.color = 'var(--red)'; }
+  }
+}
+
 
 async function refreshAccountQuotes(accId){
   const acc = data.accounts.find(a=>a.id===accId);
@@ -4241,6 +4417,8 @@ function openSettings(){
   document.getElementById('sbSyncId').value = cfg.syncId || '';
   const qk = document.getElementById('quoteKey');
   if(qk) qk.value = getQuoteKey();
+  const ak = document.getElementById('alchemyKey');
+  if(ak) ak.value = getAlchemyKey();
   ensureGoalSettings();
   document.getElementById('goalBillsThreshold').value = data.goalSettings.billsThresholdPct;
   document.getElementById('goalSavingsTarget').value = data.goalSettings.savingsTarget || '';
@@ -4293,6 +4471,8 @@ document.getElementById('settingsSave').addEventListener('click', async ()=>{
   const msg = document.getElementById('settingsMsg');
   const qk = document.getElementById('quoteKey');
   if(qk) localStorage.setItem(QUOTE_KEY, qk.value.trim());
+  const ak = document.getElementById('alchemyKey');
+  if(ak) localStorage.setItem(ALCHEMY_KEY, ak.value.trim());
 
   ensureGoalSettings();
   let billsThreshold = Number(document.getElementById('goalBillsThreshold').value);
