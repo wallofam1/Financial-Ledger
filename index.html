@@ -1168,9 +1168,18 @@
   .paidfrom-box .pexp-reserve-note {
     font-size: 11.5px; color: var(--text-tertiary); white-space: nowrap; margin-left: auto;
   }
-  .paidfrom-open {
+  .paidfrom-toggle {
+    background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; font-size: 16px; min-width: 28px; min-height: 28px;
+    border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .paidfrom-toggle:hover { color: var(--text); background: var(--bg-input); }
+  .paidfrom-toggle.active { color: var(--accent); }
+  .paidfrom-summary {
     background: none; border: none; color: var(--accent); font-family: var(--font);
     font-size: 11.5px; cursor: pointer; padding: 2px 0 8px; text-decoration: underline; text-underline-offset: 2px;
+    display: block;
   }
   .reserve-row {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -2621,22 +2630,31 @@ function cashCheckingAccounts(){
 }
 
 /** One consistent "Paid from" control for any expense line — recurring due
-    bill or one-off extra expense alike. Collapsed to a small "+ Paid from"
-    link by default (implicit "pay from paycheck"); once an account is
-    chosen, expands to an account dropdown (Cash accounts + an explicit
-    "Pay from paycheck" option to clear it) plus an amount field, pre-filled
-    with the full expense amount so one click covers the common case, with
-    room to dial down to a partial split. */
+    bill or one-off extra expense alike. A small "•••" button (matching the
+    same pattern used elsewhere in the app) sits inline with the row; the
+    account picker itself stays collapsed until tapped, keeping the row
+    clean, but a compact summary line stays visible when collapsed if a
+    choice is already set, so the info isn't hidden away. Returns
+    {toggle, body} — toggle goes inline in the row, body goes on its own
+    line below (empty when there's nothing to show). */
 function paidFromBoxHtml(kind, pi, itemId, accountId, amount, fullAmount){
   const cashAccounts = cashCheckingAccounts();
-  if(!cashAccounts.length) return '';
-  if(!accountId){
-    return `<button type="button" class="ghost paidfrom-open" data-kind="${kind}" data-pi="${pi}" data-id="${itemId}">+ Paid from</button>`;
-  }
+  if(!cashAccounts.length) return { toggle: '', body: '' };
+  const key = kind + ':' + itemId;
+  const isOpen = expandedPaidFrom.has(key);
   const full = Number(fullAmount)||0;
   const amt = Number(amount)||0;
+  const acc = accountId ? data.accounts.find(a=>a.id===accountId) : null;
+
+  const toggle = `<button type="button" class="paidfrom-toggle ${acc?'active':''}" data-kind="${kind}" data-pi="${pi}" data-id="${itemId}" title="Paid from">${ICON_MORE}</button>`;
+
+  if(!isOpen){
+    const body = acc ? `<button type="button" class="paidfrom-summary" data-kind="${kind}" data-pi="${pi}" data-id="${itemId}">${escapeHtml(acc.name)} · ${fmt(amt)}</button>` : '';
+    return { toggle, body };
+  }
+
   const payAmt = Math.max(0, full - Math.min(amt, full));
-  return `
+  const body = `
     <div class="paidfrom-box">
       <select class="paidfrom-acct" data-kind="${kind}" data-pi="${pi}" data-id="${itemId}">
         <option value="">Pay from paycheck</option>
@@ -2646,6 +2664,7 @@ function paidFromBoxHtml(kind, pi, itemId, accountId, amount, fullAmount){
       <span class="pexp-reserve-note">→ ${fmt(payAmt)} from paycheck</span>
     </div>
   `;
+  return { toggle, body };
 }
 
 function periodDueTotal(p){
@@ -2828,7 +2847,7 @@ function renderPlanner(){
     const rec = recurringItems('expenses');
     const dueRows = rec.length ? rec.map(x=>{
       const pf = paidFrom[x.id] || {};
-      const boxHtml = dueSet.has(x.id) ? paidFromBoxHtml('due', i, x.id, pf.accountId, pf.amount, Number(x.amount)||0) : '';
+      const pfr = dueSet.has(x.id) ? paidFromBoxHtml('due', i, x.id, pf.accountId, pf.amount, Number(x.amount)||0) : { toggle:'', body:'' };
       return `
       <div class="exp-check-row">
         <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
@@ -2838,8 +2857,9 @@ function renderPlanner(){
           </span>
         </label>
         <span class="eamt">${fmt(x.amount)}</span>
+        ${pfr.toggle}
       </div>
-      ${dueSet.has(x.id) ? `<div class="paidfrom-row">${boxHtml}</div>` : ''}
+      ${pfr.body ? `<div class="paidfrom-row">${pfr.body}</div>` : ''}
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
     const dueIncomeSet = new Set(p.dueIncomeIds || []);
     const recInc = recurringItems('incomes');
@@ -2860,15 +2880,16 @@ function renderPlanner(){
       </div>
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring income yet. Mark it as recurring in Cash Flow.</div>';
     const rows = (p.expenses||[]).map(e=>{
-      const boxHtml = paidFromBoxHtml('extra', i, e.id, e.reserveAccountId, e.reserveAmount, Number(e.amount)||0);
+      const pfr = paidFromBoxHtml('extra', i, e.id, e.reserveAccountId, e.reserveAmount, Number(e.amount)||0);
       return `
       <div class="period-exp-wrap" data-eid="${e.id}">
         <div class="period-exp-row">
           <input type="text" data-pi="${i}" data-eid="${e.id}" data-field="desc" value="${escapeHtml(e.desc||'')}" placeholder="Expense description">
           <input type="number" data-pi="${i}" data-eid="${e.id}" data-field="amount" value="${e.amount||''}" step="any" placeholder="0">
+          ${pfr.toggle}
           <button type="button" class="del" data-pi="${i}" data-eid="${e.id}" title="Remove">${ICON_X}</button>
         </div>
-        <div class="paidfrom-row">${boxHtml}</div>
+        ${pfr.body ? `<div class="paidfrom-row">${pfr.body}</div>` : ''}
       </div>
     `;}).join('') || '<div class="empty-note" style="padding:8px 0;text-align:left;">No expenses for this check yet.</div>';
 
@@ -3000,24 +3021,11 @@ function renderPlanner(){
     });
   });
 
-  wrap.querySelectorAll('.paidfrom-open').forEach(btn=>{
+  wrap.querySelectorAll('.paidfrom-toggle, .paidfrom-summary').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      ensurePlanner();
-      const i = Number(btn.dataset.pi);
-      const p = data.planner.periods[i];
-      const id = btn.dataset.id;
-      const firstCash = cashCheckingAccounts()[0];
-      if(!firstCash) return;
-      if(btn.dataset.kind === 'due'){
-        const bill = recurringItems('expenses').find(x=>x.id===id);
-        p.billPaidFrom[id] = { accountId: firstCash.id, amount: bill ? Number(bill.amount)||0 : 0 };
-      } else {
-        const e = p.expenses.find(x=>x.id===id);
-        if(!e) return;
-        e.reserveAccountId = firstCash.id;
-        e.reserveAmount = Number(e.amount)||0;
-      }
-      saveData();
+      const key = btn.dataset.kind + ':' + btn.dataset.id;
+      if(expandedPaidFrom.has(key)) expandedPaidFrom.delete(key);
+      else expandedPaidFrom.add(key);
       renderPlanner();
     });
   });
@@ -3299,6 +3307,7 @@ document.querySelectorAll('.subtab-btn').forEach(btn=>{
 const expandedAccounts = new Set();
 const expandedIncomeMore = new Set();
 const expandedPeriods = new Set([0]); // period 1 open by default, others collapsed — focus on one at a time
+const expandedPaidFrom = new Set(); // keys like 'due:billId' or 'extra:expenseId' — which Paid-from boxes are open
 
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
