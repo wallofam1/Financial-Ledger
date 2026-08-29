@@ -1290,6 +1290,18 @@
     color: var(--accent);
     flex-shrink: 0;
   }
+  .period-toggle {
+    background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; padding: 6px; margin: -6px 0 -6px -6px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
+  }
+  .period-toggle:hover { color: var(--text); background: var(--bg-input); }
+  .period-card.collapsed { padding-bottom: 16px; }
+  .period-card.collapsed .period-title-row { margin-bottom: 4px; }
+  .period-collapsed-summary {
+    font-size: 12px; color: var(--text-tertiary); padding-left: 34px;
+  }
 
 
   .entry-row select.exp-credit {
@@ -2744,9 +2756,23 @@ function renderPlanner(){
     `;}).join('') || '<div class="empty-note" style="padding:8px 0;text-align:left;">No expenses for this check yet.</div>';
 
     const titlePlaceholder = 'Period ' + (i+1) + ' (e.g. Sep 5 – Sep 18)';
+    const collapsed = !expandedPeriods.has(i);
+    if(collapsed){
+      return `
+        <div class="section period-card collapsed" data-period="${i}">
+          <div class="period-title-row">
+            <button type="button" class="period-toggle" data-pi="${i}" title="Expand">${ICON_CHEVRON_RIGHT}</button>
+            <input type="text" class="period-title-input" data-pi="${i}" data-field="title" value="${escapeHtml(p.title||'')}" placeholder="${titlePlaceholder}">
+            <span class="pnet">${fmt(pNet)}</span>
+          </div>
+          <div class="period-collapsed-summary">Take-home ${fmt(p.income||0)} · Bills + extras ${fmt(pExp)}${pRes>0?` · ${fmt(pRes)} from reserves`:''}</div>
+        </div>
+      `;
+    }
     return `
       <div class="section period-card" data-period="${i}">
         <div class="period-title-row">
+          <button type="button" class="period-toggle" data-pi="${i}" title="Collapse">${ICON_CHEVRON_DOWN}</button>
           <input type="text" class="period-title-input" data-pi="${i}" data-field="title" value="${escapeHtml(p.title||'')}" placeholder="${titlePlaceholder}">
           <span class="pnet">${fmt(pNet)}</span>
         </div>
@@ -2774,6 +2800,15 @@ function renderPlanner(){
       const i = Number(inp.dataset.pi);
       data.planner.periods[i].title = inp.value;
       saveData();
+    });
+  });
+
+  wrap.querySelectorAll('.period-toggle').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = Number(btn.dataset.pi);
+      if(expandedPeriods.has(i)) expandedPeriods.delete(i);
+      else expandedPeriods.add(i);
+      renderPlanner();
     });
   });
 
@@ -3139,6 +3174,7 @@ document.querySelectorAll('.subtab-btn').forEach(btn=>{
 /* Accounts */
 const expandedAccounts = new Set();
 const expandedIncomeMore = new Set();
+const expandedPeriods = new Set([0]); // period 1 open by default, others collapsed — focus on one at a time
 
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
