@@ -1124,6 +1124,46 @@
   }
   .exp-check-row .ename { flex: 1; min-width: 0; }
   .exp-check-row .eamt { color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
+  .reserve-tag {
+    display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 500;
+    color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 10px;
+  }
+  .period-reserve-line span:last-child { color: var(--text-secondary); }
+  .period-exp-wrap { margin-bottom: 4px; }
+  .period-exp-reserve {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    background: var(--bg-input); border-radius: var(--radius-sm);
+    padding: 8px; margin: 4px 0 8px;
+  }
+  .period-exp-reserve select, .period-exp-reserve input {
+    font-family: var(--font); font-size: 12.5px; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 6px; padding: 7px 8px; color: var(--text);
+  }
+  .period-exp-reserve select:focus, .period-exp-reserve input:focus { outline: none; border-color: var(--accent); }
+  .period-exp-reserve .pexp-reserve-amt { width: 110px; text-align: right; flex-shrink: 0; }
+  .period-exp-reserve .pexp-reserve-note {
+    font-size: 11.5px; color: var(--text-tertiary); white-space: nowrap; margin-left: auto;
+  }
+  .period-exp-reserve .pexp-reserve-remove {
+    background: none; border: none; color: var(--text-tertiary); cursor: pointer;
+    padding: 4px; display: flex; align-items: center; flex-shrink: 0;
+  }
+  .period-exp-reserve .pexp-reserve-remove:hover { color: var(--red); }
+  .pexp-reserve-add {
+    background: none; border: none; color: var(--accent); font-family: var(--font);
+    font-size: 11.5px; cursor: pointer; padding: 2px 0 8px; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .reserve-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .reserve-row:last-child { border-bottom: none; }
+  .reserve-row .rname { font-size: 13px; font-weight: 500; color: var(--text); }
+  .reserve-row .rmath { display: flex; align-items: center; gap: 12px; font-size: 12px; }
+  .reserve-row .rhave, .reserve-row .rneed { color: var(--text-tertiary); white-space: nowrap; }
+  .reserve-row .rstatus { font-weight: 600; white-space: nowrap; }
+  .reserve-row .rstatus.ok { color: var(--green); }
+  .reserve-row .rstatus.warn { color: var(--red); }
   @media (max-width: 640px) {
     .alloc-row {
       grid-template-columns: minmax(0, 1fr) 90px;
@@ -1712,6 +1752,12 @@
     <div class="planner-hint" style="margin:-8px 0 16px;">Each card is one biweekly period. Income and expenses can differ per check.</div>
 
     <div class="planner-periods" id="planPeriods"></div>
+
+    <div class="section" id="planReserveSection" style="margin-top:8px;display:none;">
+      <h2>Reserve funds needed</h2>
+      <div class="planner-hint">Money already set aside for a specific bill, tracked against what's actually in the account.</div>
+      <div id="planReserveList" style="margin-top:8px;"></div>
+    </div>
 
     <div class="section" style="margin-top:8px;">
       <h2>Allocate projected net</h2>
@@ -2469,9 +2515,64 @@ function periodDueTotal(p){
   const ids = new Set(p.dueIds || []);
   return recurringItems('expenses').filter(x=>ids.has(x.id)).reduce((s,x)=>s+(Number(x.amount)||0),0);
 }
+/** Due bills split by funding source. A bill with a "Paid from account" set
+    (from Cash Flow) is treated as already covered by that reserve — it does
+    not reduce this period's paycheck-facing math. */
+function periodDueSplit(p){
+  const ids = new Set(p.dueIds || []);
+  const due = recurringItems('expenses').filter(x=>ids.has(x.id));
+  const paycheck = due.filter(x=>!x.debitAccountId);
+  const reserve = due.filter(x=>!!x.debitAccountId);
+  return {
+    paycheckTotal: paycheck.reduce((s,x)=>s+(Number(x.amount)||0),0),
+    reserveTotal: reserve.reduce((s,x)=>s+(Number(x.amount)||0),0),
+    paycheck, reserve
+  };
+}
+/** For a period's "extra expenses": the paycheck only needs to cover
+    amount minus whatever's been earmarked from an existing reserve account. */
+function extraPaycheckAmount(e){
+  const amt = Number(e.amount)||0;
+  const res = Math.min(Number(e.reserveAmount)||0, amt);
+  return Math.max(0, amt - res);
+}
 function periodExpenseTotal(p){
-  const extras = (p.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
-  return extras + periodDueTotal(p);
+  const extras = (p.expenses||[]).reduce((s,e)=>s+extraPaycheckAmount(e),0);
+  return extras + periodDueSplit(p).paycheckTotal;
+}
+/** Total being drawn from existing reserve accounts this period — due bills
+    tagged "Paid from" plus any partial reserve splits on extra expenses. */
+function periodReserveTotal(p){
+  const dueReserve = periodDueSplit(p).reserveTotal;
+  const extraReserve = (p.expenses||[]).reduce((s,e)=>s+Math.min(Number(e.reserveAmount)||0, Number(e.amount)||0),0);
+  return dueReserve + extraReserve;
+}
+/** Rolls up, per account, how much is committed against it across all
+    periods (due bills paid from it + extra-expense reserve splits) versus
+    what's actually sitting in it right now. This is the "how much do I need
+    in this account" answer. */
+function reserveAccountNeeds(){
+  ensurePlanner();
+  const needs = {}; // accountId -> amount
+  data.planner.periods.forEach(p=>{
+    const { reserve } = periodDueSplit(p);
+    reserve.forEach(x=>{
+      needs[x.debitAccountId] = (needs[x.debitAccountId]||0) + (Number(x.amount)||0);
+    });
+    (p.expenses||[]).forEach(e=>{
+      if(e.reserveAccountId && e.reserveAmount){
+        const amt = Math.min(Number(e.reserveAmount)||0, Number(e.amount)||0);
+        needs[e.reserveAccountId] = (needs[e.reserveAccountId]||0) + amt;
+      }
+    });
+  });
+  return Object.keys(needs).map(accId=>{
+    const acc = data.accounts.find(a=>a.id===accId);
+    if(!acc) return null;
+    const needed = Math.round(needs[accId]*100)/100;
+    const balance = accountBalance(acc);
+    return { accountId: accId, name: acc.name, needed, balance, shortfall: Math.round((needed-balance)*100)/100 };
+  }).filter(Boolean).sort((a,b)=> b.shortfall - a.shortfall);
 }
 
 function plannerGross(){
@@ -2493,6 +2594,31 @@ function plannerAllocated(){
   return Object.values(data.planner.allocations).reduce((s,v)=>s+(Number(v)||0),0);
 }
 
+function renderReservePanel(){
+  const section = document.getElementById('planReserveSection');
+  const list = document.getElementById('planReserveList');
+  if(!section || !list) return;
+  const needs = reserveAccountNeeds();
+  if(!needs.length){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  list.innerHTML = needs.map(n=>{
+    const short = n.shortfall > 0.005;
+    return `
+      <div class="reserve-row">
+        <div class="rname">${escapeHtml(n.name)}</div>
+        <div class="rmath">
+          <span class="rhave">Have ${fmt(n.balance)}</span>
+          <span class="rneed">Need ${fmt(n.needed)}</span>
+          <span class="rstatus ${short?'warn':'ok'}">${short ? fmt(n.shortfall)+' short' : 'Covered'}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderPlanner(){
   ensurePlanner();
   const gross = plannerGross();
@@ -2512,25 +2638,45 @@ function renderPlanner(){
   const wrap = document.getElementById('planPeriods');
   wrap.innerHTML = data.planner.periods.map((p, i)=>{
     const pExp = periodExpenseTotal(p);
+    const pRes = periodReserveTotal(p);
     const pNet = (Number(p.income)||0) - pExp;
     const dueSet = new Set(p.dueIds || []);
     const rec = recurringItems('expenses');
-    const dueRows = rec.length ? rec.map(x=>`
+    const dueRows = rec.length ? rec.map(x=>{
+      const resAcc = x.debitAccountId ? data.accounts.find(a=>a.id===x.debitAccountId) : null;
+      return `
       <label class="exp-check-row">
         <input type="checkbox" data-pi="${i}" data-due="${x.id}" ${dueSet.has(x.id)?'checked':''}>
         <span class="ename">${escapeHtml(x.desc || x.category || 'Bill')}
           <span style="color:var(--text-tertiary);font-size:12px;"> ${escapeHtml(x.category||'')}</span>
+          ${resAcc ? `<span class="reserve-tag">from ${escapeHtml(resAcc.name)}</span>` : ''}
         </span>
         <span class="eamt">${fmt(x.amount)}</span>
       </label>
-    `).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
-    const rows = (p.expenses||[]).map(e=>`
-      <div class="period-exp-row">
-        <input type="text" data-pi="${i}" data-eid="${e.id}" data-field="desc" value="${escapeHtml(e.desc||'')}" placeholder="Expense description">
-        <input type="number" data-pi="${i}" data-eid="${e.id}" data-field="amount" value="${e.amount||''}" step="any" placeholder="0">
-        <button type="button" class="del" data-pi="${i}" data-eid="${e.id}" title="Remove">${ICON_X}</button>
+    `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
+    const rows = (p.expenses||[]).map(e=>{
+      const hasReserve = !!e.reserveAccountId;
+      return `
+      <div class="period-exp-wrap" data-eid="${e.id}">
+        <div class="period-exp-row">
+          <input type="text" data-pi="${i}" data-eid="${e.id}" data-field="desc" value="${escapeHtml(e.desc||'')}" placeholder="Expense description">
+          <input type="number" data-pi="${i}" data-eid="${e.id}" data-field="amount" value="${e.amount||''}" step="any" placeholder="0">
+          <button type="button" class="del" data-pi="${i}" data-eid="${e.id}" title="Remove">${ICON_X}</button>
+        </div>
+        ${hasReserve ? `
+          <div class="period-exp-reserve">
+            <select class="pexp-reserve-acc" data-pi="${i}" data-eid="${e.id}">
+              ${assetAccountOptions(e.reserveAccountId||'')}
+            </select>
+            <input type="number" class="pexp-reserve-amt" data-pi="${i}" data-eid="${e.id}" value="${e.reserveAmount||''}" step="any" placeholder="From reserve">
+            <span class="pexp-reserve-note">→ ${fmt(extraPaycheckAmount(e))} from paycheck</span>
+            <button type="button" class="pexp-reserve-remove" data-pi="${i}" data-eid="${e.id}" title="Remove reserve split">${ICON_X}</button>
+          </div>
+        ` : `
+          <button type="button" class="pexp-reserve-add" data-pi="${i}" data-eid="${e.id}">+ Use funds already set aside</button>
+        `}
       </div>
-    `).join('') || '<div class="empty-note" style="padding:8px 0;text-align:left;">No expenses for this check yet.</div>';
+    `;}).join('') || '<div class="empty-note" style="padding:8px 0;text-align:left;">No expenses for this check yet.</div>';
 
     const titlePlaceholder = 'Period ' + (i+1) + ' (e.g. Sep 5 – Sep 18)';
     return `
@@ -2551,6 +2697,7 @@ function renderPlanner(){
           <button type="button" class="ghost plan-add-exp" data-pi="${i}">+ Add extra expense</button>
         </div>
         <div class="period-subtotal"><span>Bills + extras</span><span>${fmt(pExp)}</span></div>
+        ${pRes > 0 ? `<div class="period-subtotal period-reserve-line"><span>From reserves</span><span>${fmt(pRes)}</span></div>` : ''}
       </div>
     `;
   }).join('');
@@ -2595,7 +2742,7 @@ function renderPlanner(){
       else e.desc = inp.value;
       saveData();
       renderPlannerSummaryOnly();
-      // update period net / expense subtotal in-place
+      // update period net / expense subtotal / reserve note in-place
       const card = inp.closest('.period-card');
       if(card){
         const p = data.planner.periods[i];
@@ -2605,7 +2752,12 @@ function renderPlanner(){
         if(netEl) netEl.textContent = fmt(pNet);
         const sub = card.querySelector('.period-subtotal span:last-child');
         if(sub) sub.textContent = fmt(pExp);
+        if(e.reserveAccountId){
+          const note = card.querySelector(`.period-exp-wrap[data-eid="${e.id}"] .pexp-reserve-note`);
+          if(note) note.textContent = `→ ${fmt(extraPaycheckAmount(e))} from paycheck`;
+        }
       }
+      renderReservePanel();
     });
   });
 
@@ -2626,6 +2778,72 @@ function renderPlanner(){
       data.planner.periods[i].expenses.push({ id: uid(), desc: '', amount: 0 });
       saveData();
       renderPlanner();
+    });
+  });
+
+  wrap.querySelectorAll('.pexp-reserve-add').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ensurePlanner();
+      const i = Number(btn.dataset.pi);
+      const e = data.planner.periods[i].expenses.find(x=>x.id===btn.dataset.eid);
+      if(!e) return;
+      const firstAsset = data.accounts.find(a=>a.type==='asset');
+      e.reserveAccountId = firstAsset ? firstAsset.id : '';
+      e.reserveAmount = 0;
+      saveData();
+      renderPlanner();
+    });
+  });
+
+  wrap.querySelectorAll('.pexp-reserve-remove').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ensurePlanner();
+      const i = Number(btn.dataset.pi);
+      const e = data.planner.periods[i].expenses.find(x=>x.id===btn.dataset.eid);
+      if(!e) return;
+      e.reserveAccountId = '';
+      e.reserveAmount = 0;
+      saveData();
+      renderPlanner();
+    });
+  });
+
+  wrap.querySelectorAll('.pexp-reserve-acc').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      ensurePlanner();
+      const i = Number(sel.dataset.pi);
+      const e = data.planner.periods[i].expenses.find(x=>x.id===sel.dataset.eid);
+      if(!e) return;
+      e.reserveAccountId = sel.value || '';
+      saveData();
+      renderPlanner();
+    });
+  });
+
+  wrap.querySelectorAll('.pexp-reserve-amt').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      ensurePlanner();
+      const i = Number(inp.dataset.pi);
+      const e = data.planner.periods[i].expenses.find(x=>x.id===inp.dataset.eid);
+      if(!e) return;
+      e.reserveAmount = Number(inp.value)||0;
+      saveData();
+      renderPlannerSummaryOnly();
+      const card = inp.closest('.period-card');
+      if(card){
+        const p = data.planner.periods[i];
+        const pExp = periodExpenseTotal(p);
+        const pNet = (Number(p.income)||0) - pExp;
+        const netEl = card.querySelector('.pnet');
+        if(netEl) netEl.textContent = fmt(pNet);
+        const sub = card.querySelector('.period-subtotal span:last-child');
+        if(sub) sub.textContent = fmt(pExp);
+        const note = inp.closest('.period-exp-wrap').querySelector('.pexp-reserve-note');
+        if(note) note.textContent = `→ ${fmt(extraPaycheckAmount(e))} from paycheck`;
+        const resLine = card.querySelector('.period-reserve-line span:last-child');
+        if(resLine) resLine.textContent = fmt(periodReserveTotal(p));
+      }
+      renderReservePanel();
     });
   });
 
@@ -2687,6 +2905,8 @@ function renderPlanner(){
   const remVal = document.getElementById('planRemainingVal');
   if(remVal) remVal.textContent = fmt(left);
   if(rem) rem.className = 'planner-remaining ' + (left < -0.01 ? 'warn' : 'ok');
+
+  renderReservePanel();
 }
 
 function renderPlannerSummaryOnly(){
@@ -4371,12 +4591,11 @@ function findingPlannerShortfall(){
     const pExp = periodExpenseTotal(p);
     const pNet = (Number(p.income)||0) - pExp;
     if((Number(p.income)||0) > 0 && pNet < 0){
-      const dueIds = new Set(p.dueIds||[]);
-      const dueItems = recurringItems('expenses').filter(x=>dueIds.has(x.id));
+      const { paycheck } = periodDueSplit(p); // only bills actually drawing on this paycheck
       const extraItems = p.expenses||[];
       const allItems = [
-        ...dueItems.map(x=>({desc:x.desc||x.category||'Bill', amount:Number(x.amount)||0})),
-        ...extraItems.map(x=>({desc:x.desc||'Expense', amount:Number(x.amount)||0}))
+        ...paycheck.map(x=>({desc:x.desc||x.category||'Bill', amount:Number(x.amount)||0})),
+        ...extraItems.map(x=>({desc:x.desc||'Expense', amount:extraPaycheckAmount(x)}))
       ].sort((a,b)=>b.amount-a.amount);
       const biggest = allItems[0];
       const label = p.title && p.title.trim() ? p.title.trim() : 'Period ' + (i+1);
@@ -4388,6 +4607,16 @@ function findingPlannerShortfall(){
     }
   }
   return null;
+}
+
+function findingReserveShortfall(){
+  const needs = reserveAccountNeeds();
+  const short = needs.find(n=>n.shortfall > 0.005);
+  if(!short) return null;
+  return {
+    id: 'reserve-shortfall-' + short.accountId, domain: 'planner', severity: 3,
+    text: `${short.name} is ${fmt(short.shortfall)} short of what's already assigned to it — you have ${fmt(short.balance)}, ${fmt(short.needed)} is spoken for.`
+  };
 }
 
 function findingPlannerProjection(){
@@ -4405,6 +4634,7 @@ function findingPlannerProjection(){
 function allFindings(){
   return [
     findingPlannerShortfall(),
+    findingReserveShortfall(),
     findingCategoryAnomaly(),
     findingCashFlowPace(),
     findingPlannerProjection(),
