@@ -908,9 +908,16 @@
     background: var(--bg-input); border: 1px solid var(--border);
     border-radius: var(--radius-sm); padding: 9px 10px; color: var(--text);
   }
+  .wallets-list .wallet-connect-row { padding-bottom: 6px; }
   .wallet-connect-row .wallet-address:focus { outline: none; border-color: var(--accent); }
   .wallet-connect-row .wallet-chain { flex-shrink: 0; width: 92px; }
   .wallet-connect-row .refresh-wallet { flex-shrink: 0; }
+  .wallet-connect-row .wallet-remove {
+    flex-shrink: 0; background: none; border: none; color: var(--text-tertiary);
+    cursor: pointer; padding: 6px; display: flex; align-items: center;
+  }
+  .wallet-connect-row .wallet-remove:hover { color: var(--red); }
+  .wallet-actions { display: flex; gap: 8px; padding: 4px 8px 0; flex-wrap: wrap; }
   .wallet-connect-row .contrib-employee, .wallet-connect-row .contrib-employer {
     flex: 1; min-width: 100px; font-family: var(--font); font-size: 12.5px;
     background: var(--bg-input); border: 1px solid var(--border);
@@ -961,6 +968,15 @@
   .split-remaining { font-size: 11.5px; font-weight: 500; }
   .split-remaining.ok { color: var(--green); }
   .split-remaining.off { color: var(--amber); }
+  .split-subacct-row { padding: 0 0 8px; }
+  .split-subacct, .income-subacct {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary);
+    font-family: var(--font); font-size: 12px; padding: 9px 8px; border-radius: var(--radius-sm);
+    min-height: 38px;
+  }
+  .split-subacct:focus, .income-subacct:focus { outline: none; border-color: var(--accent); }
+  .split-subacct { width: 100%; }
+  .income-subacct { margin-top: 6px; width: 150px; }
 
   .add-holding {
     margin: 8px; background: none; border: 1px dashed var(--border-strong);
@@ -2274,6 +2290,22 @@ function fmt(n){
   return sign + '$' + Math.round(abs).toLocaleString('en-US');
 }
 
+/** Migrates an account from the old single-wallet shape (walletAddress/
+    walletChain) to a list of wallets, so a "Blockchain" account can combine
+    e.g. a Base wallet and a Solana wallet as sub-accounts under one total.
+    Mutates acc in place and returns the (now-guaranteed) array. */
+function ensureWalletsArray(acc){
+  if(!Array.isArray(acc.wallets)){
+    acc.wallets = [];
+    if(acc.walletAddress){
+      acc.wallets.push({ id: uid(), chain: acc.walletChain || 'base', address: acc.walletAddress });
+    }
+    delete acc.walletAddress;
+    delete acc.walletChain;
+  }
+  return acc.wallets;
+}
+
 function accountBalance(acc){
   if(acc.type === 'asset' && acc.holdings && acc.holdings.length){
     const sum = acc.holdings.reduce((s,h)=> s + (Number(h.value)||0), 0);
@@ -2286,6 +2318,23 @@ function assetAccountOptions(selectedId){
   return data.accounts.filter(a=>a.type==='asset').map(a=>
     `<option value="${a.id}" ${a.id===selectedId?'selected':''}>${escapeHtml(a.name)}</option>`
   ).join('');
+}
+
+/** When a deposit's destination account is broken into sub-accounts (e.g.
+    Checking/Savings), renders a small picker so the user can redirect the
+    deposit away from the "Checking" default. Returns '' for a plain
+    flat-balance account, since there's nothing to choose between. */
+function subAccountSelectHtml(itemId, accId, selectedName, cls, extraAttr){
+  const acc = data.accounts.find(a=>a.id===accId);
+  if(!acc || !acc.holdings || !acc.holdings.length) return '';
+  const names = Array.from(new Set(acc.holdings.map(h=>(h.name||'').trim()).filter(Boolean)));
+  const hasChecking = names.some(n=>n.toLowerCase()==='checking');
+  return `
+    <select class="${cls}" data-id="${itemId}" ${extraAttr||''} title="Which sub-account this lands in">
+      <option value="">${hasChecking ? 'Checking (default)' : 'Checking (default, new)'}</option>
+      ${names.map(n=>`<option value="${escapeHtml(n)}" ${n===(selectedName||'')?'selected':''}>${escapeHtml(n)}</option>`).join('')}
+    </select>
+  `;
 }
 
 /** Add (or subtract) money to an asset. Holdings accounts get a contribution holding. */
@@ -2344,34 +2393,56 @@ function applyExpenseCreditChange(item, prevAmount, prevAccountId, prevDebitId){
 /* ---- Income deposits: supports either a single destination account
    (creditAccountId) or a split across multiple accounts (deposits[]).
    Both paths funnel through the same reconcile helper so delete/undo/edit
-   always reverse exactly what was actually applied, whichever mode is active. */
+   always reverse exactly what was actually applied, whichever mode is active.
+   When the destination account is broken into sub-accounts (e.g. a "Cash"
+   account with Checking/Savings), a paycheck deposit lands in "Checking" by
+   default — the sub-account most people actually get paid into — unless the
+   user has explicitly pointed that deposit at a different sub-account. */
 function effectiveDeposits(item){
   if(item.deposits && item.deposits.length) return item.deposits;
-  if(item.creditAccountId) return [{ accountId: item.creditAccountId, amount: item.amount }];
+  if(item.creditAccountId) return [{ accountId: item.creditAccountId, amount: item.amount, subAccount: item.subAccount || '' }];
   return [];
 }
-function reverseIncomeCredits(deposits, label){
+function reverseIncomeCredits(deposits){
   (deposits||[]).forEach(d=>{
     const amt = Number(d.amount)||0;
-    if(d.accountId && amt) creditAsset(d.accountId, -amt, label);
+    if(d.accountId && amt) creditAsset(d.accountId, -amt, (d.subAccount && d.subAccount.trim()) || 'Checking');
   });
 }
-function applyIncomeCredits(deposits, label){
+function applyIncomeCredits(deposits){
   (deposits||[]).forEach(d=>{
     const amt = Number(d.amount)||0;
-    if(d.accountId && amt) creditAsset(d.accountId, amt, label);
+    if(d.accountId && amt) creditAsset(d.accountId, amt, (d.subAccount && d.subAccount.trim()) || 'Checking');
   });
 }
 /** Snapshots current effective deposits, lets you mutate the item freely,
-    then reverses the old credits and applies the new ones. Safe for both
-    single-account and split-mode incomes, and for transitions between them. */
+    then applies only the *net* change per (account, sub-account) — never a
+    blind reverse-everything-then-reapply-everything. That matters because a
+    full reversal can zero out and auto-clean-up a sub-account holding, which
+    would make the account look like it has no sub-accounts for the instant
+    before the reapply runs, corrupting an unrelated row's reapplication in
+    the same batch. Computing one net delta per destination avoids ever
+    passing through that spurious empty state, and as a bonus skips any
+    row that didn't actually change. */
 function reconcileIncomeCredits(item, mutateFn){
-  const label = item.desc || item.category || 'Paycheck';
   const before = JSON.parse(JSON.stringify(effectiveDeposits(item)));
-  reverseIncomeCredits(before, label);
   mutateFn();
   const after = effectiveDeposits(item);
-  applyIncomeCredits(after, label);
+
+  const keyOf = d => d.accountId + '|' + ((d.subAccount && d.subAccount.trim()) || 'Checking');
+  const net = {};
+  const tally = (list, sign) => list.forEach(d=>{
+    if(!d.accountId) return;
+    const k = keyOf(d);
+    if(!net[k]) net[k] = { accountId: d.accountId, subAccount: (d.subAccount && d.subAccount.trim()) || 'Checking', delta: 0 };
+    net[k].delta += sign * (Number(d.amount)||0);
+  });
+  tally(before, -1);
+  tally(after, 1);
+
+  Object.values(net).forEach(n=>{
+    if(Math.abs(n.delta) > 0.001) creditAsset(n.accountId, n.delta, n.subAccount);
+  });
   saveData();
 }
 function updateSplitRemaining(incId){
@@ -2441,8 +2512,7 @@ function softDelete(collection, id, label){
     if(item.creditAccountId) creditAsset(item.creditAccountId, -amt, label);
     if(item.debitAccountId) creditAsset(item.debitAccountId, amt, label);
   } else if(collection==='incomes'){
-    const label = item.desc || item.category || 'Paycheck';
-    reverseIncomeCredits(effectiveDeposits(item), label);
+    reverseIncomeCredits(effectiveDeposits(item));
   }
   arr.splice(idx, 1);
   saveData();
@@ -2475,8 +2545,7 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
     if(item.creditAccountId) creditAsset(item.creditAccountId, amt, label);
     if(item.debitAccountId) creditAsset(item.debitAccountId, -amt, label);
   } else if(collection==='incomes'){
-    const label = item.desc || item.category || 'Paycheck';
-    applyIncomeCredits(effectiveDeposits(item), label);
+    applyIncomeCredits(effectiveDeposits(item));
   }
   saveData();
   undoStack = null;
@@ -3246,22 +3315,30 @@ function renderRows(){
           <select class="cat" data-id="${acc.id}" data-field="category">
             ${ASSET_CATS.map(c=>`<option value="${c}" ${c===acc.category?'selected':''}>${c}</option>`).join('')}
           </select>
-          <input class="balance" type="number" value="${bal}" data-id="${acc.id}" data-field="balance" ${acc.holdings.length?'readonly title="Sum of holdings"':''}>
+          <input class="balance" type="number" value="${bal}" data-id="${acc.id}" data-field="balance" ${acc.holdings.length?`readonly title="Sum of ${acc.category==='Cash'?'sub-accounts':'holdings'}"`:''}>
           <button class="del" data-id="${acc.id}" title="Remove">${ICON_X}</button>
         </div>
         <div class="holdings-panel ${isOpen?'open':''}" id="holdings-${acc.id}">
           ${acc.category === 'Blockchain' ? `
-            <div class="wallet-connect-row">
-              <select class="wallet-chain" id="wchain-${acc.id}" data-acc="${acc.id}">
-                <option value="base" ${(acc.walletChain||'base')==='base'?'selected':''}>Base</option>
-                <option value="solana" ${acc.walletChain==='solana'?'selected':''}>Solana</option>
-              </select>
-              <input type="text" class="wallet-address" id="waddr-${acc.id}" data-acc="${acc.id}"
-                placeholder="${(acc.walletChain||'base')==='solana' ? 'Solana wallet address' : '0x… Base wallet address'}"
-                value="${escapeHtml(acc.walletAddress||'')}" spellcheck="false" autocomplete="off">
-              <button class="ghost refresh-wallet" data-acc="${acc.id}" type="button">Refresh wallet</button>
+            <div class="wallets-list">
+              ${ensureWalletsArray(acc).map(w=>`
+                <div class="wallet-connect-row" data-wallet="${w.id}">
+                  <select class="wallet-chain" data-acc="${acc.id}" data-wallet="${w.id}">
+                    <option value="base" ${w.chain==='base'?'selected':''}>Base</option>
+                    <option value="solana" ${w.chain==='solana'?'selected':''}>Solana</option>
+                  </select>
+                  <input type="text" class="wallet-address" data-acc="${acc.id}" data-wallet="${w.id}"
+                    placeholder="${w.chain==='solana' ? 'Solana wallet address' : '0x… Base wallet address'}"
+                    value="${escapeHtml(w.address||'')}" spellcheck="false" autocomplete="off">
+                  <button class="wallet-remove" data-acc="${acc.id}" data-wallet="${w.id}" title="Remove wallet">${ICON_X}</button>
+                </div>
+              `).join('')}
             </div>
-            <div class="wallet-hint">Reads your public wallet address only — never asks for a private key or seed phrase.</div>
+            <div class="wallet-actions">
+              <button class="ghost wallet-add" data-acc="${acc.id}" type="button">+ Add wallet</button>
+              <button class="ghost refresh-wallet" data-acc="${acc.id}" type="button">Refresh all wallets</button>
+            </div>
+            <div class="wallet-hint">Reads public wallet addresses only — never asks for a private key or seed phrase. Combine a Base and a Solana wallet under one account.</div>
             <span class="quote-status" id="wstat-${acc.id}"></span>
           ` : ''}
           ${acc.category === 'Retirement' ? `
@@ -3273,9 +3350,16 @@ function renderRows(){
             <div class="wallet-hint">Adds straight to this account's balance — skips Cash Flow entirely, since your contribution is already reflected in your net paycheck.</div>
             <span class="quote-status" id="cstat-${acc.id}"></span>
           ` : ''}
-          ${acc.holdings.map(h=> holdingRowHtml(acc.id, h)).join('')}
+          ${acc.category === 'Cash' ? `
+            <div class="wallet-hint">Break this account into pieces — e.g. "Checking" and "Savings" — that roll up into one total below.</div>
+          ` : ''}
+          ${acc.holdings.map(h=> holdingRowHtml(acc.id, h, acc.category==='Cash')).join('')}
           <div class="holdings-sum" id="hsum-${acc.id}"></div>
-          ${acc.category === 'Blockchain' ? '' : `
+          ${acc.category === 'Blockchain' ? '' : acc.category === 'Cash' ? `
+          <div class="holdings-toolbar">
+            <button class="add-holding" data-acc="${acc.id}" style="width:auto;margin:0;">+ Add sub-account</button>
+          </div>
+          ` : `
           <div class="holdings-toolbar">
             <button class="add-holding" data-acc="${acc.id}" style="width:auto;margin:0;">+ Add holding</button>
             <button class="ghost refresh-quotes" data-acc="${acc.id}" type="button">Refresh prices</button>
@@ -3346,7 +3430,9 @@ function renderRows(){
     el.addEventListener('blur', ()=>{
       const acc = data.accounts.find(a=>a.id===el.dataset.acc);
       if(!acc) return;
-      acc.walletAddress = el.value.trim();
+      const w = ensureWalletsArray(acc).find(w=>w.id===el.dataset.wallet);
+      if(!w) return;
+      w.address = el.value.trim();
       saveData();
     });
     el.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); refreshWalletHoldings(el.dataset.acc); } });
@@ -3355,10 +3441,31 @@ function renderRows(){
     el.addEventListener('change', ()=>{
       const acc = data.accounts.find(a=>a.id===el.dataset.acc);
       if(!acc) return;
-      acc.walletChain = el.value;
+      const w = ensureWalletsArray(acc).find(w=>w.id===el.dataset.wallet);
+      if(!w) return;
+      w.chain = el.value;
       saveData();
-      const addrInput = document.getElementById('waddr-' + acc.id);
+      const row = el.closest('.wallet-connect-row');
+      const addrInput = row ? row.querySelector('.wallet-address') : null;
       if(addrInput) addrInput.placeholder = el.value === 'solana' ? 'Solana wallet address' : '0x… Base wallet address';
+    });
+  });
+  document.querySelectorAll('#assetsRows .wallet-add').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const acc = data.accounts.find(a=>a.id===el.dataset.acc);
+      if(!acc) return;
+      ensureWalletsArray(acc).push({ id: uid(), chain: 'base', address: '' });
+      saveData();
+      renderRows();
+    });
+  });
+  document.querySelectorAll('#assetsRows .wallet-remove').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const acc = data.accounts.find(a=>a.id===el.dataset.acc);
+      if(!acc) return;
+      acc.wallets = ensureWalletsArray(acc).filter(w=>w.id!==el.dataset.wallet);
+      saveData();
+      renderRows();
     });
   });
   document.querySelectorAll('#assetsRows .add-holding').forEach(el=>{
@@ -3753,35 +3860,56 @@ async function fetchSolanaWalletHoldings(address){
 async function refreshWalletHoldings(accId){
   const acc = data.accounts.find(a=>a.id===accId);
   if(!acc) return;
-  const addrInput = document.getElementById('waddr-' + accId);
-  const chainInput = document.getElementById('wchain-' + accId);
+  const wallets = ensureWalletsArray(acc);
   let status = document.getElementById('wstat-' + accId);
-  const address = (addrInput ? addrInput.value : acc.walletAddress || '').trim();
-  const chain = (chainInput ? chainInput.value : acc.walletChain) || 'base';
-  acc.walletAddress = address;
-  acc.walletChain = chain;
-  saveData();
 
-  const chainLabel = chain === 'solana' ? 'Solana' : 'Base';
-  if(status){ status.textContent = `Fetching from ${chainLabel}…`; status.style.color = 'var(--text-tertiary)'; }
-  try{
-    const holdings = chain === 'solana'
-      ? await fetchSolanaWalletHoldings(address)
-      : await fetchBaseWalletHoldings(address);
-    acc.holdings = holdings;
-    acc.balance = accountBalance(acc);
-    saveData();
-    renderRows();
-    renderSummary();
-    renderTallies();
-    // renderRows() rebuilt the DOM, so the earlier status reference is now detached — re-query it
-    status = document.getElementById('wstat-' + accId);
-    if(status){
-      status.textContent = holdings.length ? `Updated · ${holdings.length} token${holdings.length===1?'':'s'} found` : `Wallet is empty on ${chainLabel}`;
+  const configured = wallets.filter(w=>(w.address||'').trim());
+  if(!configured.length){
+    if(status){ status.textContent = 'Add at least one wallet address'; status.style.color = 'var(--red)'; }
+    return;
+  }
+
+  if(status){ status.textContent = `Fetching from ${configured.length} wallet${configured.length===1?'':'s'}…`; status.style.color = 'var(--text-tertiary)'; }
+  const allHoldings = [];
+  const problems = [];
+  for(const w of configured){
+    const chainLabel = w.chain === 'solana' ? 'Solana' : 'Base';
+    try{
+      const holdings = w.chain === 'solana'
+        ? await fetchSolanaWalletHoldings(w.address.trim())
+        : await fetchBaseWalletHoldings(w.address.trim());
+      // Tag each holding with its source chain so, e.g., USDC on Base and
+      // USDC on Solana don't look like the same duplicated line.
+      holdings.forEach(h=>{
+        if(!h.name.includes(chainLabel)) h.name = h.name + ' (' + chainLabel + ')';
+      });
+      allHoldings.push(...holdings);
+    }catch(e){
+      problems.push(`${chainLabel}: ${e.message || 'failed'}`);
+    }
+  }
+
+  acc.holdings = allHoldings;
+  acc.balance = accountBalance(acc);
+  saveData();
+  renderRows();
+  renderSummary();
+  renderTallies();
+  // renderRows() rebuilt the DOM, so the earlier status reference is now detached — re-query it
+  status = document.getElementById('wstat-' + accId);
+  if(status){
+    if(problems.length && allHoldings.length){
+      status.textContent = `Updated with issues — ${problems.join('; ')}`;
+      status.style.color = 'var(--amber)';
+    } else if(problems.length){
+      status.textContent = problems.join('; ');
+      status.style.color = 'var(--red)';
+    } else {
+      status.textContent = allHoldings.length
+        ? `Updated · ${allHoldings.length} token${allHoldings.length===1?'':'s'} across ${configured.length} wallet${configured.length===1?'':'s'}`
+        : 'Wallets are empty';
       status.style.color = 'var(--green)';
     }
-  }catch(e){
-    if(status){ status.textContent = e.message || 'Could not fetch wallet'; status.style.color = 'var(--red)'; }
   }
 }
 
@@ -3883,9 +4011,9 @@ async function refreshAccountQuotes(accId){
 }
 
 const expandedHoldings = new Set();
-function holdingRowHtml(accId, h){
+function holdingRowHtml(accId, h, simple){
   const px = (h.price || h.price===0) ? h.price : '';
-  const name = (h.name||'').trim() || (h.ticker||'').trim() || 'Untitled';
+  const name = (h.name||'').trim() || (h.ticker||'').trim() || (simple ? 'Untitled sub-account' : 'Untitled');
   const units = Number(h.units)||0;
   const price = Number(h.price)||0;
   let meta = (h.ticker||'').toUpperCase();
@@ -3897,16 +4025,18 @@ function holdingRowHtml(accId, h){
       <button type="button" class="holding-face" data-acc="${accId}" data-hid="${h.id}">
         <div>
           <div class="hf-name">${escapeHtml(name)}</div>
-          <div class="hf-meta">${escapeHtml(meta || 'Tap to edit')}</div>
+          ${simple ? '' : `<div class="hf-meta">${escapeHtml(meta || 'Tap to edit')}</div>`}
         </div>
         <div class="hf-val">${fmt(Number(h.value)||0)}</div>
       </button>
       <div class="holding-edit">
-        <input class="h-name" value="${escapeHtml(h.name||'')}" placeholder="Name" data-acc="${accId}" data-hid="${h.id}" data-hfield="name">
+        <input class="h-name" value="${escapeHtml(h.name||'')}" placeholder="${simple?'Sub-account name':'Name'}" data-acc="${accId}" data-hid="${h.id}" data-hfield="name">
+        ${simple ? '' : `
         <input class="h-ticker" value="${escapeHtml(h.ticker||'')}" placeholder="Ticker" data-acc="${accId}" data-hid="${h.id}" data-hfield="ticker">
         <input class="h-units" type="number" value="${h.units||0}" placeholder="Shares" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="units">
         <input class="h-price" type="number" value="${px}" placeholder="Price" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="price" title="Last price">
-        <input class="h-value" type="number" value="${h.value||0}" placeholder="Value" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="value">
+        `}
+        <input class="h-value" type="number" value="${h.value||0}" placeholder="${simple?'Balance':'Value'}" step="any" data-acc="${accId}" data-hid="${h.id}" data-hfield="value">
         <button class="del" data-acc="${accId}" data-hid="${h.id}" title="Remove">${ICON_X}</button>
       </div>
     </div>
@@ -3920,7 +4050,8 @@ function updateHoldingsSum(acc){
     el.textContent = '';
     return;
   }
-  el.textContent = acc.holdings.length + ' holding' + (acc.holdings.length===1?'':'s') + ' · ' + fmt(accountBalance(acc));
+  const noun = acc.category === 'Cash' ? 'sub-account' : 'holding';
+  el.textContent = acc.holdings.length + ' ' + noun + (acc.holdings.length===1?'':'s') + ' · ' + fmt(accountBalance(acc));
   el.className = 'holdings-sum';
 }
 
@@ -4350,7 +4481,7 @@ function bindSplitEvents(wrap){
       if(!inc) return;
       const d = (inc.deposits||[]).find(x=>x.id===el.dataset.split);
       if(!d) return;
-      reconcileIncomeCredits(inc, ()=>{ d.accountId = el.value || ''; });
+      reconcileIncomeCredits(inc, ()=>{ d.accountId = el.value || ''; d.subAccount = ''; });
       renderIncomeRows(); renderRows(); renderSummary(); renderDashExpenses();
     });
   });
@@ -4375,6 +4506,24 @@ function bindSplitEvents(wrap){
       const remainder = Math.round(((Number(inc.amount)||0) - others) * 100) / 100;
       reconcileIncomeCredits(inc, ()=>{ d.amount = remainder; });
       renderIncomeRows(); renderRows(); renderSummary(); renderDashExpenses();
+    });
+  });
+  wrap.querySelectorAll('.split-subacct').forEach(el=>{
+    el.addEventListener('change', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      const d = (inc.deposits||[]).find(x=>x.id===el.dataset.split);
+      if(!d) return;
+      reconcileIncomeCredits(inc, ()=>{ d.subAccount = el.value || ''; });
+      renderRows(); renderSummary(); renderDashExpenses();
+    });
+  });
+  wrap.querySelectorAll('.income-subacct').forEach(el=>{
+    el.addEventListener('change', ()=>{
+      const inc = data.incomes.find(x=>x.id===el.dataset.id);
+      if(!inc) return;
+      reconcileIncomeCredits(inc, ()=>{ inc.subAccount = el.value || ''; });
+      renderRows(); renderSummary(); renderDashExpenses();
     });
   });
 }
@@ -4403,7 +4552,8 @@ function onEntryFieldChange(e, collection){
     item.creditAccountId = e.target.value || '';
     applyExpenseCreditChange(item, item.amount, prevAcc, item.debitAccountId);
   } else if(field==='creditAccountId' && collection==='incomes'){
-    reconcileIncomeCredits(item, ()=>{ item.creditAccountId = e.target.value || ''; });
+    reconcileIncomeCredits(item, ()=>{ item.creditAccountId = e.target.value || ''; item.subAccount = ''; });
+    renderIncomeRows(); // discrete change, not typing — safe to rebuild so the sub-account picker shows/hides correctly
   } else if(field==='debitAccountId' && collection==='expenses'){
     const prevDebit = item.debitAccountId || '';
     item.debitAccountId = e.target.value || '';
@@ -4589,6 +4739,7 @@ function currentMonthIncomes(){
 }
 
 function splitRowHtml(incId, d){
+  const subHtml = subAccountSelectHtml(incId, d.accountId, d.subAccount, 'split-subacct', `data-split="${d.id}"`);
   return `
     <div class="split-row" data-split="${d.id}">
       <select class="split-account" data-id="${incId}" data-split="${d.id}">
@@ -4599,6 +4750,7 @@ function splitRowHtml(incId, d){
       <button type="button" class="ghost split-fill" data-id="${incId}" data-split="${d.id}" title="Fill remaining amount">Fill</button>
       <button type="button" class="split-del" data-id="${incId}" data-split="${d.id}" title="Remove">${ICON_X}</button>
     </div>
+    ${subHtml ? `<div class="split-subacct-row">${subHtml}</div>` : ''}
   `;
 }
 
@@ -4633,6 +4785,7 @@ function renderIncomeRows(){
         <option value="">Deposits into: none</option>
         ${assetAccountOptions(inc.creditAccountId||'')}
       </select>
+      ${inc.creditAccountId ? subAccountSelectHtml(inc.id, inc.creditAccountId, inc.subAccount, 'income-subacct entry-more') : ''}
       `}
     `;
     outer.appendChild(row);
