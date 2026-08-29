@@ -1124,9 +1124,13 @@
   }
   .exp-check-row .ename { flex: 1; min-width: 0; }
   .exp-check-row .eamt { color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
-  .reserve-tag {
-    display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 500;
-    color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 10px;
+  .reserve-covered-row {
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    padding: 2px 0 10px 28px; margin-top: -4px;
+    font-size: 11.5px; color: var(--text-tertiary); line-height: 1.4;
+  }
+  .reserve-covered-row input[type=checkbox] {
+    width: 15px; height: 15px; accent-color: var(--accent); flex-shrink: 0;
   }
   .period-reserve-line span:last-child { color: var(--text-secondary); }
   .period-exp-wrap { margin-bottom: 4px; }
@@ -2492,6 +2496,7 @@ function ensurePlanner(){
     if(!p || typeof p !== 'object') return defaultPeriod(idx);
     if(!Array.isArray(p.expenses)) p.expenses = [];
     if(!Array.isArray(p.dueIds)) p.dueIds = [];
+    if(!Array.isArray(p.reserveDueIds)) p.reserveDueIds = [];
     if(typeof p.title !== 'string') p.title = p.title ? String(p.title) : '';
     p.income = Number(p.income)||0;
     return p;
@@ -2515,14 +2520,18 @@ function periodDueTotal(p){
   const ids = new Set(p.dueIds || []);
   return recurringItems('expenses').filter(x=>ids.has(x.id)).reduce((s,x)=>s+(Number(x.amount)||0),0);
 }
-/** Due bills split by funding source. A bill with a "Paid from account" set
-    (from Cash Flow) is treated as already covered by that reserve — it does
-    not reduce this period's paycheck-facing math. */
+/** Due bills split by funding source. A bill only counts as "already covered"
+    if it's linked to an account AND the user has explicitly marked it as
+    covered for this period — a "Paid from" link alone isn't enough, since
+    that just records which account the money leaves from (which could be
+    the same account this very paycheck lands in), not that it's pre-funded
+    independent of this paycheck. */
 function periodDueSplit(p){
   const ids = new Set(p.dueIds || []);
+  const reserveIds = new Set(p.reserveDueIds || []);
   const due = recurringItems('expenses').filter(x=>ids.has(x.id));
-  const paycheck = due.filter(x=>!x.debitAccountId);
-  const reserve = due.filter(x=>!!x.debitAccountId);
+  const paycheck = due.filter(x=>!(x.debitAccountId && reserveIds.has(x.id)));
+  const reserve = due.filter(x=>x.debitAccountId && reserveIds.has(x.id));
   return {
     paycheckTotal: paycheck.reduce((s,x)=>s+(Number(x.amount)||0),0),
     reserveTotal: reserve.reduce((s,x)=>s+(Number(x.amount)||0),0),
@@ -2641,18 +2650,27 @@ function renderPlanner(){
     const pRes = periodReserveTotal(p);
     const pNet = (Number(p.income)||0) - pExp;
     const dueSet = new Set(p.dueIds || []);
+    const reserveDueSet = new Set(p.reserveDueIds || []);
     const rec = recurringItems('expenses');
     const dueRows = rec.length ? rec.map(x=>{
       const resAcc = x.debitAccountId ? data.accounts.find(a=>a.id===x.debitAccountId) : null;
+      const isReserve = reserveDueSet.has(x.id);
       return `
-      <label class="exp-check-row">
-        <input type="checkbox" data-pi="${i}" data-due="${x.id}" ${dueSet.has(x.id)?'checked':''}>
-        <span class="ename">${escapeHtml(x.desc || x.category || 'Bill')}
-          <span style="color:var(--text-tertiary);font-size:12px;"> ${escapeHtml(x.category||'')}</span>
-          ${resAcc ? `<span class="reserve-tag">from ${escapeHtml(resAcc.name)}</span>` : ''}
-        </span>
+      <div class="exp-check-row">
+        <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
+          <input type="checkbox" data-pi="${i}" data-due="${x.id}" ${dueSet.has(x.id)?'checked':''}>
+          <span class="ename">${escapeHtml(x.desc || x.category || 'Bill')}
+            <span style="color:var(--text-tertiary);font-size:12px;"> ${escapeHtml(x.category||'')}</span>
+          </span>
+        </label>
         <span class="eamt">${fmt(x.amount)}</span>
-      </label>
+      </div>
+      ${resAcc && dueSet.has(x.id) ? `
+        <label class="reserve-covered-row">
+          <input type="checkbox" data-pi="${i}" data-reserve-due="${x.id}" ${isReserve?'checked':''}>
+          Already covered by ${escapeHtml(resAcc.name)} — don't count against this paycheck
+        </label>
+      ` : ''}
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
     const rows = (p.expenses||[]).map(e=>{
       const hasReserve = !!e.reserveAccountId;
@@ -2855,6 +2873,25 @@ function renderPlanner(){
       const set = new Set(data.planner.periods[i].dueIds || []);
       if(cb.checked) set.add(id); else set.delete(id);
       data.planner.periods[i].dueIds = [...set];
+      if(!cb.checked){
+        // no longer due this period — its "already covered" flag doesn't apply either
+        const rset = new Set(data.planner.periods[i].reserveDueIds || []);
+        rset.delete(id);
+        data.planner.periods[i].reserveDueIds = [...rset];
+      }
+      saveData();
+      renderPlanner();
+    });
+  });
+
+  wrap.querySelectorAll('input[data-reserve-due]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      ensurePlanner();
+      const i = Number(cb.dataset.pi);
+      const id = cb.dataset.reserveDue;
+      const set = new Set(data.planner.periods[i].reserveDueIds || []);
+      if(cb.checked) set.add(id); else set.delete(id);
+      data.planner.periods[i].reserveDueIds = [...set];
       saveData();
       renderPlanner();
     });
