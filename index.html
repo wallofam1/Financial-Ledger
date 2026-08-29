@@ -1066,6 +1066,9 @@
     font-size: 12px;
     color: var(--text-tertiary);
   }
+  .acommit { font-weight: 500; }
+  .acommit.pos { color: var(--green); }
+  .acommit.neg { color: var(--red); }
   .alloc-row input {
     width: 100%;
     background: var(--bg-input);
@@ -2496,7 +2499,19 @@ function ensurePlanner(){
     if(!p || typeof p !== 'object') return defaultPeriod(idx);
     if(!Array.isArray(p.expenses)) p.expenses = [];
     if(!Array.isArray(p.dueIds)) p.dueIds = [];
-    if(!Array.isArray(p.reserveDueIds)) p.reserveDueIds = [];
+    if(!p.reserveDue || typeof p.reserveDue !== 'object'){
+      // migrate from the old all-or-nothing reserveDueIds flag: treat it as
+      // "full bill amount from reserve" so existing choices carry forward
+      p.reserveDue = {};
+      if(Array.isArray(p.reserveDueIds)){
+        const rec = recurringItems('expenses');
+        p.reserveDueIds.forEach(id=>{
+          const bill = rec.find(x=>x.id===id);
+          if(bill) p.reserveDue[id] = Number(bill.amount)||0;
+        });
+      }
+    }
+    delete p.reserveDueIds;
     if(typeof p.title !== 'string') p.title = p.title ? String(p.title) : '';
     p.income = Number(p.income)||0;
     return p;
@@ -2520,23 +2535,25 @@ function periodDueTotal(p){
   const ids = new Set(p.dueIds || []);
   return recurringItems('expenses').filter(x=>ids.has(x.id)).reduce((s,x)=>s+(Number(x.amount)||0),0);
 }
-/** Due bills split by funding source. A bill only counts as "already covered"
-    if it's linked to an account AND the user has explicitly marked it as
-    covered for this period — a "Paid from" link alone isn't enough, since
-    that just records which account the money leaves from (which could be
-    the same account this very paycheck lands in), not that it's pre-funded
-    independent of this paycheck. */
+/** Due bills split by funding source, with a partial amount per bill — a bill
+    can be part-covered by its "Paid from" account and part paid from this
+    paycheck (e.g. $850 rent, $500 already sitting in an account, $350 still
+    due from this check). p.reserveDue maps billId -> amount drawn from that
+    account; anything not covered there falls to the paycheck by default. */
 function periodDueSplit(p){
   const ids = new Set(p.dueIds || []);
-  const reserveIds = new Set(p.reserveDueIds || []);
+  const reserveDue = p.reserveDue || {};
   const due = recurringItems('expenses').filter(x=>ids.has(x.id));
-  const paycheck = due.filter(x=>!(x.debitAccountId && reserveIds.has(x.id)));
-  const reserve = due.filter(x=>x.debitAccountId && reserveIds.has(x.id));
-  return {
-    paycheckTotal: paycheck.reduce((s,x)=>s+(Number(x.amount)||0),0),
-    reserveTotal: reserve.reduce((s,x)=>s+(Number(x.amount)||0),0),
-    paycheck, reserve
-  };
+  let paycheckTotal = 0, reserveTotal = 0;
+  const paycheck = [], reserve = [];
+  due.forEach(x=>{
+    const amt = Number(x.amount)||0;
+    const res = x.debitAccountId ? Math.min(Number(reserveDue[x.id])||0, amt) : 0;
+    const pay = Math.max(0, amt - res);
+    if(res > 0){ reserveTotal += res; reserve.push({ ...x, reserveAmount: res }); }
+    if(pay > 0){ paycheckTotal += pay; paycheck.push({ ...x, amount: pay }); }
+  });
+  return { paycheckTotal: Math.round(paycheckTotal*100)/100, reserveTotal: Math.round(reserveTotal*100)/100, paycheck, reserve };
 }
 /** For a period's "extra expenses": the paycheck only needs to cover
     amount minus whatever's been earmarked from an existing reserve account. */
@@ -2566,7 +2583,7 @@ function reserveAccountNeeds(){
   data.planner.periods.forEach(p=>{
     const { reserve } = periodDueSplit(p);
     reserve.forEach(x=>{
-      needs[x.debitAccountId] = (needs[x.debitAccountId]||0) + (Number(x.amount)||0);
+      needs[x.debitAccountId] = (needs[x.debitAccountId]||0) + (Number(x.reserveAmount)||0);
     });
     (p.expenses||[]).forEach(e=>{
       if(e.reserveAccountId && e.reserveAmount){
@@ -2582,6 +2599,34 @@ function reserveAccountNeeds(){
     const balance = accountBalance(acc);
     return { accountId: accId, name: acc.name, needed, balance, shortfall: Math.round((needed-balance)*100)/100 };
   }).filter(Boolean).sort((a,b)=> b.shortfall - a.shortfall);
+}
+/** Net effect already planned for a given account across all periods, from
+    money the Planner already knows is moving: bills that pay INTO this
+    account (their full amount, via "Pays into") minus whatever's being
+    drawn OUT of this account to cover bills/expenses (via the reserve
+    splits above). This is what "Allocate projected net" should already
+    reflect before the user types anything into the manual Add field. */
+function accountCommittedNet(accId){
+  ensurePlanner();
+  let net = 0;
+  data.planner.periods.forEach(p=>{
+    const ids = new Set(p.dueIds || []);
+    const due = recurringItems('expenses').filter(x=>ids.has(x.id));
+    const reserveDue = p.reserveDue || {};
+    due.forEach(x=>{
+      if(x.creditAccountId === accId) net += Number(x.amount)||0;
+      if(x.debitAccountId === accId){
+        const res = Math.min(Number(reserveDue[x.id])||0, Number(x.amount)||0);
+        net -= res;
+      }
+    });
+    (p.expenses||[]).forEach(e=>{
+      if(e.reserveAccountId === accId){
+        net -= Math.min(Number(e.reserveAmount)||0, Number(e.amount)||0);
+      }
+    });
+  });
+  return Math.round(net*100)/100;
 }
 
 function plannerGross(){
@@ -2650,11 +2695,12 @@ function renderPlanner(){
     const pRes = periodReserveTotal(p);
     const pNet = (Number(p.income)||0) - pExp;
     const dueSet = new Set(p.dueIds || []);
-    const reserveDueSet = new Set(p.reserveDueIds || []);
+    const reserveDue = p.reserveDue || {};
     const rec = recurringItems('expenses');
     const dueRows = rec.length ? rec.map(x=>{
       const resAcc = x.debitAccountId ? data.accounts.find(a=>a.id===x.debitAccountId) : null;
-      const isReserve = reserveDueSet.has(x.id);
+      const resAmt = Number(reserveDue[x.id])||0;
+      const payAmt = Math.max(0, (Number(x.amount)||0) - Math.min(resAmt, Number(x.amount)||0));
       return `
       <div class="exp-check-row">
         <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
@@ -2666,10 +2712,11 @@ function renderPlanner(){
         <span class="eamt">${fmt(x.amount)}</span>
       </div>
       ${resAcc && dueSet.has(x.id) ? `
-        <label class="reserve-covered-row">
-          <input type="checkbox" data-pi="${i}" data-reserve-due="${x.id}" ${isReserve?'checked':''}>
-          Already covered by ${escapeHtml(resAcc.name)} — don't count against this paycheck
-        </label>
+        <div class="period-exp-reserve due-bill-reserve">
+          <span class="pexp-reserve-note" style="margin-left:0;">From ${escapeHtml(resAcc.name)}:</span>
+          <input type="number" class="due-reserve-amt" data-pi="${i}" data-bill="${x.id}" value="${resAmt||''}" placeholder="0" step="any">
+          <span class="pexp-reserve-note">→ ${fmt(payAmt)} from paycheck</span>
+        </div>
       ` : ''}
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
     const rows = (p.expenses||[]).map(e=>{
@@ -2862,6 +2909,7 @@ function renderPlanner(){
         if(resLine) resLine.textContent = fmt(periodReserveTotal(p));
       }
       renderReservePanel();
+      renderAllocList();
     });
   });
 
@@ -2874,69 +2922,48 @@ function renderPlanner(){
       if(cb.checked) set.add(id); else set.delete(id);
       data.planner.periods[i].dueIds = [...set];
       if(!cb.checked){
-        // no longer due this period — its "already covered" flag doesn't apply either
-        const rset = new Set(data.planner.periods[i].reserveDueIds || []);
-        rset.delete(id);
-        data.planner.periods[i].reserveDueIds = [...rset];
+        // no longer due this period — any reserve split on it doesn't apply either
+        delete data.planner.periods[i].reserveDue[id];
       }
       saveData();
       renderPlanner();
     });
   });
 
-  wrap.querySelectorAll('input[data-reserve-due]').forEach(cb=>{
-    cb.addEventListener('change', ()=>{
+  wrap.querySelectorAll('.due-reserve-amt').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
       ensurePlanner();
-      const i = Number(cb.dataset.pi);
-      const id = cb.dataset.reserveDue;
-      const set = new Set(data.planner.periods[i].reserveDueIds || []);
-      if(cb.checked) set.add(id); else set.delete(id);
-      data.planner.periods[i].reserveDueIds = [...set];
+      const i = Number(inp.dataset.pi);
+      const id = inp.dataset.bill;
+      const p = data.planner.periods[i];
+      const val = Number(inp.value)||0;
+      if(val > 0) p.reserveDue[id] = val;
+      else delete p.reserveDue[id];
       saveData();
-      renderPlanner();
+      renderPlannerSummaryOnly();
+      // live-update this bill's paycheck note + the card's totals, no full re-render (keeps focus)
+      const card = inp.closest('.period-card');
+      const bill = recurringItems('expenses').find(x=>x.id===id);
+      if(card && bill){
+        const amt = Number(bill.amount)||0;
+        const payAmt = Math.max(0, amt - Math.min(val, amt));
+        const note = inp.closest('.due-bill-reserve').querySelector('.pexp-reserve-note:last-child');
+        if(note) note.textContent = `→ ${fmt(payAmt)} from paycheck`;
+        const pExp = periodExpenseTotal(p);
+        const pNet = (Number(p.income)||0) - pExp;
+        const netEl = card.querySelector('.pnet');
+        if(netEl) netEl.textContent = fmt(pNet);
+        const sub = card.querySelector('.period-subtotal span:last-child');
+        if(sub) sub.textContent = fmt(pExp);
+        const resLine = card.querySelector('.period-reserve-line span:last-child');
+        if(resLine) resLine.textContent = fmt(periodReserveTotal(p));
+      }
+      renderReservePanel();
+      renderAllocList();
     });
   });
 
-  // allocations
-  const allocList = document.getElementById('planAllocList');
-  const assets = data.accounts.filter(a=>a.type==='asset');
-  if(!assets.length){
-    allocList.innerHTML = '<div class="empty-note" style="padding:16px 0;">Add asset accounts first.</div>';
-  } else {
-    allocList.innerHTML = assets.map(a=>{
-      const bal = accountBalance(a);
-      const add = Number(data.planner.allocations[a.id])||0;
-      const proj = bal + add;
-      return `
-        <div class="alloc-row">
-          <div>
-            <div class="aname">${escapeHtml(a.name)}</div>
-            <div class="abal">Now ${fmt(bal)}</div>
-          </div>
-          <input type="number" step="any" data-aid="${a.id}" value="${add||''}" placeholder="0">
-          <div class="proj">${fmt(proj)}</div>
-        </div>
-      `;
-    }).join('');
-    allocList.querySelectorAll('input').forEach(inp=>{
-      inp.addEventListener('input', ()=>{
-        ensurePlanner();
-        const v = Number(inp.value)||0;
-        if(v) data.planner.allocations[inp.dataset.aid] = v;
-        else delete data.planner.allocations[inp.dataset.aid];
-        saveData();
-        const left = plannerNet() - plannerAllocated();
-        document.getElementById('planLeftFig').textContent = fmt(left);
-        const row = inp.closest('.alloc-row');
-        const acc = data.accounts.find(a=>a.id===inp.dataset.aid);
-        if(row && acc) row.querySelector('.proj').textContent = fmt(accountBalance(acc)+v);
-        const rem = document.getElementById('planRemaining');
-        const remVal = document.getElementById('planRemainingVal');
-        remVal.textContent = fmt(left);
-        rem.className = 'planner-remaining ' + (left < -0.01 ? 'warn' : 'ok');
-      });
-    });
-  }
+  renderAllocList();
 
   const rem = document.getElementById('planRemaining');
   const remVal = document.getElementById('planRemainingVal');
@@ -2944,6 +2971,51 @@ function renderPlanner(){
   if(rem) rem.className = 'planner-remaining ' + (left < -0.01 ? 'warn' : 'ok');
 
   renderReservePanel();
+}
+
+function renderAllocList(){
+  ensurePlanner();
+  const allocList = document.getElementById('planAllocList');
+  if(!allocList) return;
+  const assets = data.accounts.filter(a=>a.type==='asset');
+  if(!assets.length){
+    allocList.innerHTML = '<div class="empty-note" style="padding:16px 0;">Add asset accounts first.</div>';
+    return;
+  }
+  allocList.innerHTML = assets.map(a=>{
+    const bal = accountBalance(a);
+    const committed = accountCommittedNet(a.id);
+    const add = Number(data.planner.allocations[a.id])||0;
+    const proj = bal + committed + add;
+    return `
+      <div class="alloc-row">
+        <div>
+          <div class="aname">${escapeHtml(a.name)}</div>
+          <div class="abal">Now ${fmt(bal)}${committed ? ` <span class="acommit ${committed>0?'pos':'neg'}">${committed>0?'+':''}${fmt(committed)} planned</span>` : ''}</div>
+        </div>
+        <input type="number" step="any" data-aid="${a.id}" value="${add||''}" placeholder="0">
+        <div class="proj">${fmt(proj)}</div>
+      </div>
+    `;
+  }).join('');
+  allocList.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      ensurePlanner();
+      const v = Number(inp.value)||0;
+      if(v) data.planner.allocations[inp.dataset.aid] = v;
+      else delete data.planner.allocations[inp.dataset.aid];
+      saveData();
+      const left = plannerNet() - plannerAllocated();
+      document.getElementById('planLeftFig').textContent = fmt(left);
+      const row = inp.closest('.alloc-row');
+      const acc = data.accounts.find(a=>a.id===inp.dataset.aid);
+      if(row && acc) row.querySelector('.proj').textContent = fmt(accountBalance(acc) + accountCommittedNet(acc.id) + v);
+      const rem = document.getElementById('planRemaining');
+      const remVal = document.getElementById('planRemainingVal');
+      remVal.textContent = fmt(left);
+      rem.className = 'planner-remaining ' + (left < -0.01 ? 'warn' : 'ok');
+    });
+  });
 }
 
 function renderPlannerSummaryOnly(){
