@@ -2749,10 +2749,14 @@ function switchTab(tabId){
   });
   if(tabId === 'dashboard'){
     const details = document.getElementById('dashDetails');
-    if(details && details.style.display !== 'none') renderChart();
+    if(details && details.style.display !== 'none'){
+      try { renderChart(); } catch(e){ console.error('renderChart failed', e); }
+    }
     renderDashExpenses();
   }
-  if(tabId === 'accounts') renderAccountsChart();
+  if(tabId === 'accounts'){
+    try { renderAccountsChart(); } catch(e){ console.error('renderAccountsChart failed', e); }
+  }
   if(tabId === 'cashflow'){
     if(typeof renderExpenseAll === 'function') renderExpenseAll();
     if(typeof renderIncomeAll === 'function') renderIncomeAll();
@@ -3685,12 +3689,14 @@ function renderAccountsChart(){
 }
 
 function renderAll(){
-  renderRows();
-  renderSummary();
-  renderTallies();
-  renderChart();
-  renderAccountsChart();
-  renderDashExpenses();
+  // Each step runs independently — if one throws (e.g. a slow/blocked CDN leaves
+  // Chart.js unavailable), it must not prevent the others from running. Without
+  // this, a single failed chart render silently skipped the Dashboard goal rings
+  // on first load until the user switched tabs and back.
+  const steps = [renderRows, renderSummary, renderTallies, renderChart, renderAccountsChart, renderDashExpenses];
+  steps.forEach(fn=>{
+    try { fn(); } catch(e){ console.error(fn.name + ' failed', e); }
+  });
 }
 
 /* Shared helpers */
