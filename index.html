@@ -2511,6 +2511,7 @@ function ensurePlanner(){
     if(!p || typeof p !== 'object') return defaultPeriod(idx);
     if(!Array.isArray(p.expenses)) p.expenses = [];
     if(!Array.isArray(p.dueIds)) p.dueIds = [];
+    if(!Array.isArray(p.dueIncomeIds)) p.dueIncomeIds = [];
     if(!p.reserveDue || typeof p.reserveDue !== 'object'){
       // migrate from the old all-or-nothing reserveDueIds flag: treat it as
       // "full bill amount from reserve" so existing choices carry forward
@@ -2616,8 +2617,9 @@ function reserveAccountNeeds(){
     money the Planner already knows is moving: bills that pay INTO this
     account (their full amount, via "Pays into") minus whatever's being
     drawn OUT of this account to cover bills/expenses (via the reserve
-    splits above). This is what "Allocate projected net" should already
-    reflect before the user types anything into the manual Add field. */
+    splits above), plus any paycheck deposits (single-account or split)
+    checked as due this period. This is what "Allocate projected net"
+    should already reflect before the user types anything into Add. */
 function accountCommittedNet(accId){
   ensurePlanner();
   let net = 0;
@@ -2636,6 +2638,13 @@ function accountCommittedNet(accId){
       if(e.reserveAccountId === accId){
         net -= Math.min(Number(e.reserveAmount)||0, Number(e.amount)||0);
       }
+    });
+    const incIds = new Set(p.dueIncomeIds || []);
+    const dueIncomes = recurringItems('incomes').filter(x=>incIds.has(x.id));
+    dueIncomes.forEach(inc=>{
+      effectiveDeposits(inc).forEach(d=>{
+        if(d.accountId === accId) net += Number(d.amount)||0;
+      });
     });
   });
   return Math.round(net*100)/100;
@@ -2731,6 +2740,24 @@ function renderPlanner(){
         </div>
       ` : ''}
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
+    const dueIncomeSet = new Set(p.dueIncomeIds || []);
+    const recInc = recurringItems('incomes');
+    const incomeRows = recInc.length ? recInc.map(x=>{
+      const deposits = effectiveDeposits(x);
+      const splitNote = deposits.length > 1
+        ? deposits.map(d=>{ const acc = data.accounts.find(a=>a.id===d.accountId); return (acc?acc.name:'—') + ' ' + fmt(d.amount); }).join(', ')
+        : (deposits.length === 1 ? (data.accounts.find(a=>a.id===deposits[0].accountId)||{}).name : null);
+      return `
+      <div class="exp-check-row">
+        <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
+          <input type="checkbox" data-pi="${i}" data-due-income="${x.id}" ${dueIncomeSet.has(x.id)?'checked':''}>
+          <span class="ename">${escapeHtml(x.desc || x.category || 'Income')}
+            <span style="color:var(--text-tertiary);font-size:12px;"> ${splitNote ? '→ '+escapeHtml(splitNote) : ''}</span>
+          </span>
+        </label>
+        <span class="eamt">${fmt(x.amount)}</span>
+      </div>
+    `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring income yet. Mark it as recurring in Cash Flow.</div>';
     const rows = (p.expenses||[]).map(e=>{
       const hasReserve = !!e.reserveAccountId;
       return `
@@ -2780,7 +2807,9 @@ function renderPlanner(){
           <label>Take-home</label>
           <input type="number" data-pi="${i}" data-field="income" value="${p.income||''}" step="any" placeholder="0">
         </div>
-        <div style="font-size:12px;color:var(--text-tertiary);margin:4px 0 6px;">Bills due this paycheck</div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin:4px 0 6px;">Income this paycheck</div>
+        <div class="period-due-list">${incomeRows}</div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin:12px 0 6px;">Bills due this paycheck</div>
         <div class="period-due-list">${dueRows}</div>
         <div style="font-size:12px;color:var(--text-tertiary);margin:12px 0 6px;">Extra expenses this period</div>
         <div class="period-exp-list">${rows}</div>
@@ -2960,6 +2989,19 @@ function renderPlanner(){
         // no longer due this period — any reserve split on it doesn't apply either
         delete data.planner.periods[i].reserveDue[id];
       }
+      saveData();
+      renderPlanner();
+    });
+  });
+
+  wrap.querySelectorAll('input[data-due-income]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      ensurePlanner();
+      const i = Number(cb.dataset.pi);
+      const id = cb.dataset.dueIncome;
+      const set = new Set(data.planner.periods[i].dueIncomeIds || []);
+      if(cb.checked) set.add(id); else set.delete(id);
+      data.planner.periods[i].dueIncomeIds = [...set];
       saveData();
       renderPlanner();
     });
