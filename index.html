@@ -335,19 +335,19 @@
   .row:last-of-type { border-bottom: none; }
   .row input.name {
     flex: 1; background: none; border: none; color: var(--text);
-    font-family: var(--font); font-size: 15px; padding: 8px 2px;
-    border-bottom: 1px solid transparent; min-height: 40px;
+    font-family: var(--font); font-size: 13px; padding: 6px 2px;
+    border-bottom: 1px solid transparent; min-height: 33px;
   }
   .row input.name:focus { outline: none; border-bottom-color: var(--accent); }
   select.cat {
     background: var(--bg-input); border: 1px solid var(--border);
-    color: var(--text-secondary); font-family: var(--font); font-size: 12px;
-    border-radius: var(--radius-sm); padding: 8px 10px; max-width: 120px; min-height: 40px;
+    color: var(--text-secondary); font-family: var(--font); font-size: 11.5px;
+    border-radius: var(--radius-sm); padding: 6px 9px; max-width: 120px; min-height: 33px;
   }
   .row input.balance {
-    width: 110px; background: var(--bg-input); border: 1px solid var(--border);
-    color: var(--text); font-family: var(--font); font-size: 15px; font-weight: 500;
-    text-align: right; padding: 8px 12px; border-radius: var(--radius-sm); min-height: 40px;
+    width: 100px; background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font); font-size: 13px; font-weight: 500;
+    text-align: right; padding: 6px 10px; border-radius: var(--radius-sm); min-height: 33px;
   }
   .row input.balance:focus, select.cat:focus {
     outline: none; border-color: var(--accent);
@@ -404,33 +404,33 @@
   .entry-row:last-of-type { border-bottom: none; }
   .entry-row input.exp-date {
     background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary);
-    font-family: var(--font); font-size: 13px; padding: 10px 10px; border-radius: var(--radius-sm);
-    width: 140px; min-height: 42px; flex-shrink: 0;
+    font-family: var(--font); font-size: 12px; padding: 7px 9px; border-radius: var(--radius-sm);
+    width: 130px; min-height: 34px; flex-shrink: 0;
   }
   .entry-row select.exp-cat {
     background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
-    font-family: var(--font); font-size: 13px; padding: 10px 10px; border-radius: var(--radius-sm);
-    width: 150px; min-height: 42px; flex-shrink: 0;
+    font-family: var(--font); font-size: 12px; padding: 7px 9px; border-radius: var(--radius-sm);
+    width: 140px; min-height: 34px; flex-shrink: 0;
   }
   .entry-row input.exp-desc::placeholder { color: var(--text-tertiary); }
   .entry-row input.exp-desc {
     flex: 1; min-width: 100px; background: none; border: none; color: var(--text);
-    font-family: var(--font); font-size: 15px; padding: 8px 2px;
-    border-bottom: 1px solid transparent; min-height: 40px;
+    font-family: var(--font); font-size: 13px; padding: 6px 2px;
+    border-bottom: 1px solid transparent; min-height: 33px;
   }
   .entry-row input.exp-desc:focus { outline: none; border-bottom-color: var(--accent); }
   .entry-row input.exp-amount {
-    width: 100px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
-    font-family: var(--font); font-size: 15px; font-weight: 500;
-    text-align: right; padding: 10px 12px; border-radius: var(--radius-sm); min-height: 42px; flex-shrink: 0;
+    width: 92px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    text-align: right; padding: 7px 10px; border-radius: var(--radius-sm); min-height: 34px; flex-shrink: 0;
   }
   .entry-row input:focus, .entry-row select:focus {
     outline: none; border-color: var(--accent);
   }
   .entry-row select.exp-freq {
     background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
-    font-family: var(--font); font-size: 12px; padding: 10px 8px; border-radius: var(--radius-sm);
-    width: 110px; min-height: 42px; flex-shrink: 0;
+    font-family: var(--font); font-size: 11.5px; padding: 7px 7px; border-radius: var(--radius-sm);
+    width: 100px; min-height: 34px; flex-shrink: 0;
   }
   .entry-row select.exp-freq:focus { outline: none; border-color: var(--accent); }
   .entry-row .del { flex-shrink: 0; }
@@ -1204,6 +1204,12 @@
   .reserve-row .rstatus.ok { color: var(--green); }
   .reserve-row .rstatus.warn { color: var(--red); }
   @media (max-width: 640px) {
+    .reserve-row {
+      flex-direction: column; align-items: flex-start; gap: 4px;
+    }
+    .reserve-row .rmath { flex-wrap: wrap; row-gap: 4px; width: 100%; }
+    .default-pay-row { flex-direction: column; align-items: stretch; gap: 6px; }
+    .default-pay-row select { max-width: none; width: 100%; min-height: 38px; }
     .alloc-row {
       grid-template-columns: minmax(0, 1fr) 90px;
       grid-template-areas:
@@ -1338,8 +1344,8 @@
 
   .entry-row select.exp-credit {
     background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
-    font-family: var(--font); font-size: 12px; padding: 10px 8px; border-radius: var(--radius-sm);
-    width: 150px; min-height: 42px; flex-shrink: 0;
+    font-family: var(--font); font-size: 11.5px; padding: 7px 7px; border-radius: var(--radius-sm);
+    width: 140px; min-height: 34px; flex-shrink: 0;
   }
   .entry-row select.exp-credit:focus { outline: none; border-color: var(--accent); }
 
@@ -1360,8 +1366,8 @@
 
   .entry-row select.exp-debit {
     background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
-    font-family: var(--font); font-size: 12px; padding: 10px 8px; border-radius: var(--radius-sm);
-    width: 150px; min-height: 42px; flex-shrink: 0;
+    font-family: var(--font); font-size: 11.5px; padding: 7px 7px; border-radius: var(--radius-sm);
+    width: 140px; min-height: 34px; flex-shrink: 0;
   }
 
 
@@ -1417,23 +1423,31 @@
     display: flex; align-items: center; justify-content: center;
   }
   .entry-row .more-btn:hover, .entry-row.open-more .more-btn { color: var(--text); background: var(--bg-input); }
+  .pending-tag {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--amber); background: var(--amber-soft); padding: 3px 7px; border-radius: 10px;
+    flex-shrink: 0; white-space: nowrap;
+  }
 
   @media (max-width: 640px) {
     .entry-row {
       grid-template-areas:
         "desc desc more del"
-        "date amount amount amount" !important;
+        "date amount amount amount"
+        "pend pend pend pend" !important;
       grid-template-columns: 1fr 1fr 28px 28px !important;
     }
     .entry-row.open-more {
       grid-template-areas:
         "desc desc more del"
         "date amount amount amount"
+        "pend pend pend pend"
         "cat freq freq freq"
         "credit credit credit credit"
         "debit debit debit debit" !important;
     }
     .entry-row .more-btn { grid-area: more; }
+    .entry-row .pending-tag { grid-area: pend; justify-self: start; margin-top: -2px; }
   }
 
   .mobile-topbar {
@@ -1819,7 +1833,7 @@
           <option value="">None — keep bills abstract from any account</option>
         </select>
       </div>
-      <div class="planner-hint" style="margin-top:-4px;">Bills not explicitly tagged "Paid from" elsewhere will net against this account here, since that's realistically where they'll actually be paid from.</div>
+      <div class="planner-hint" style="margin-top:8px;">Bills not explicitly tagged "Paid from" elsewhere will net against this account here, since that's realistically where they'll actually be paid from.</div>
       <div class="alloc-head" style="margin-top:12px;"><span>Account</span><span>Add</span><span>Projected</span></div>
       <div id="planAllocList"></div>
       <div class="planner-remaining ok" id="planRemaining">
@@ -2059,6 +2073,38 @@ if(!data.expenses) data.expenses = [];
 if(!data.incomes) data.incomes = [];
 if(!data._updatedAt) data._updatedAt = new Date().toISOString();
 if(!data.planner) data.planner = { periods: null, allocations:{} };
+
+// Migration: entries saved before the posted/pending system existed were
+// always applied to real balances immediately regardless of date — mark
+// them posted so this change doesn't retroactively reverse money that's
+// already real for existing users.
+data.expenses.forEach(x=>{ if(typeof x.posted !== 'boolean') x.posted = true; });
+data.incomes.forEach(x=>{ if(typeof x.posted !== 'boolean') x.posted = true; });
+
+/** Entries created as pending (future-dated) whose date has since arrived
+    get applied now — the same way a real transaction clears once its date
+    comes, rather than the instant you schedule it. Cheap to run often, so
+    it's called on load and again on every renderAll() to catch a date
+    rollover during a long-open session. */
+function applyDuePostings(){
+  let changed = false;
+  data.expenses.forEach(item=>{
+    if(!item.posted && isDueToday(item.date)){
+      item.posted = true;
+      effectiveExpenseCredits(item).forEach(d=> creditAsset(d.accountId, d.amount, resolveSubAccountName(d.accountId, d.subAccount)));
+      changed = true;
+    }
+  });
+  data.incomes.forEach(item=>{
+    if(!item.posted && isDueToday(item.date)){
+      item.posted = true;
+      applyIncomeCredits(effectiveDeposits(item));
+      changed = true;
+    }
+  });
+  if(changed) saveData();
+}
+applyDuePostings();
 
 let chart, accountsChart, expenseChart, incomeChart;
 
@@ -2347,14 +2393,30 @@ function assetAccountOptions(selectedId){
     Checking/Savings), renders a small picker so the user can redirect the
     deposit away from the "Checking" default. Returns '' for a plain
     flat-balance account, since there's nothing to choose between. */
+/** Resolves which sub-account name a deposit/credit should actually use: an
+    explicit user choice always wins; otherwise, prefer an existing
+    sub-account whose name contains "checking" (handles "Joint Checking" as
+    well as plain "Checking"); otherwise fall back to whichever sub-account
+    already exists, rather than inventing an unrelated new one; only a
+    truly empty account falls back to creating "Checking" fresh. */
+function resolveSubAccountName(accId, explicitName){
+  const trimmed = (explicitName||'').trim();
+  if(trimmed) return trimmed;
+  const acc = data.accounts.find(a=>a.id===accId);
+  if(!acc || !acc.holdings || !acc.holdings.length) return 'Checking';
+  const names = acc.holdings.map(h=>(h.name||'').trim()).filter(Boolean);
+  const checkingMatch = names.find(n=>n.toLowerCase().includes('checking'));
+  return checkingMatch || names[0] || 'Checking';
+}
+
 function subAccountSelectHtml(itemId, accId, selectedName, cls, extraAttr){
   const acc = data.accounts.find(a=>a.id===accId);
   if(!acc || !acc.holdings || !acc.holdings.length) return '';
   const names = Array.from(new Set(acc.holdings.map(h=>(h.name||'').trim()).filter(Boolean)));
-  const hasChecking = names.some(n=>n.toLowerCase()==='checking');
+  const defaultName = resolveSubAccountName(accId, '');
   return `
     <select class="${cls}" data-id="${itemId}" ${extraAttr||''} title="Which sub-account this lands in">
-      <option value="">${hasChecking ? 'Checking (default)' : 'Checking (default, new)'}</option>
+      <option value="">${escapeHtml(defaultName)} (default)</option>
       ${names.map(n=>`<option value="${escapeHtml(n)}" ${n===(selectedName||'')?'selected':''}>${escapeHtml(n)}</option>`).join('')}
     </select>
   `;
@@ -2388,29 +2450,52 @@ function cashAccountOptions(selectedId){
   ).join('');
 }
 
-function applyExpenseCreditChange(item, prevAmount, prevAccountId, prevDebitId){
-  const label = item.desc || item.category || 'Contribution';
-  const newAmt = Number(item.amount)||0;
-  const newAcc = item.creditAccountId || '';
-  const newDebit = item.debitAccountId || '';
-  prevAmount = Number(prevAmount)||0;
-  prevAccountId = prevAccountId || '';
-  prevDebitId = prevDebitId || '';
-  // reverse previous destination credit
-  if(prevAccountId && prevAmount){
-    creditAsset(prevAccountId, -prevAmount, label);
-  }
-  // reverse previous source debit
-  if(prevDebitId && prevAmount){
-    creditAsset(prevDebitId, prevAmount, label);
-  }
-  // apply new
-  if(newAcc && newAmt){
-    creditAsset(newAcc, newAmt, label);
-  }
-  if(newDebit && newAmt){
-    creditAsset(newDebit, -newAmt, label);
-  }
+function isDueToday(dateStr){
+  if(!dateStr) return true; // no date on the entry — apply immediately, matches old behavior
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.getTime() <= today.getTime();
+}
+
+/** What's currently reflected in real balances for this expense — only
+    entries marked posted (their date has arrived) actually touch real
+    balances. A future-dated entry is a pending record only, exactly like a
+    real bank transaction that hasn't cleared yet. When the destination (or
+    source) account is broken into sub-accounts, this defaults to
+    "Checking" — same as income deposits — unless the user has explicitly
+    pointed this expense at a specific sub-account. */
+function effectiveExpenseCredits(item){
+  if(!item.posted) return [];
+  const list = [];
+  const amt = Number(item.amount)||0;
+  if(item.creditAccountId && amt) list.push({ accountId: item.creditAccountId, amount: amt, subAccount: item.creditSubAccount || '' });
+  if(item.debitAccountId && amt) list.push({ accountId: item.debitAccountId, amount: -amt, subAccount: item.debitSubAccount || '' });
+  return list;
+}
+
+/** Snapshots what's currently applied, lets you freely mutate the item
+    (amount, accounts, or date), re-evaluates whether it's now due, and
+    applies only the net change per (account, sub-account) — so editing a
+    still-pending entry never touches real balances, and an unrelated
+    account/sub-account combination is never disturbed. */
+function reconcileExpenseCredits(item, mutateFn){
+  const before = effectiveExpenseCredits(item);
+  mutateFn();
+  item.posted = isDueToday(item.date);
+  const after = effectiveExpenseCredits(item);
+
+  const keyOf = d => d.accountId + '|' + (resolveSubAccountName(d.accountId, d.subAccount));
+  const net = {};
+  const tally = (list, sign) => list.forEach(d=>{
+    const k = keyOf(d);
+    if(!net[k]) net[k] = { accountId: d.accountId, subAccount: resolveSubAccountName(d.accountId, d.subAccount), delta: 0 };
+    net[k].delta += sign * (Number(d.amount)||0);
+  });
+  tally(before, -1);
+  tally(after, 1);
+  Object.values(net).forEach(n=>{
+    if(Math.abs(n.delta) > 0.001) creditAsset(n.accountId, n.delta, n.subAccount);
+  });
 }
 
 /* ---- Income deposits: supports either a single destination account
@@ -2426,16 +2511,24 @@ function effectiveDeposits(item){
   if(item.creditAccountId) return [{ accountId: item.creditAccountId, amount: item.amount, subAccount: item.subAccount || '' }];
   return [];
 }
+/** Same shape as effectiveDeposits, but empty unless the entry is actually
+    posted — this is "what's really reflected in balances right now," used
+    only for real-balance reconciliation. Planner's projections deliberately
+    use the ungated effectiveDeposits() above instead, since Planner exists
+    to show future paychecks that haven't posted yet. */
+function appliedDeposits(item){
+  return item.posted ? effectiveDeposits(item) : [];
+}
 function reverseIncomeCredits(deposits){
   (deposits||[]).forEach(d=>{
     const amt = Number(d.amount)||0;
-    if(d.accountId && amt) creditAsset(d.accountId, -amt, (d.subAccount && d.subAccount.trim()) || 'Checking');
+    if(d.accountId && amt) creditAsset(d.accountId, -amt, resolveSubAccountName(d.accountId, d.subAccount));
   });
 }
 function applyIncomeCredits(deposits){
   (deposits||[]).forEach(d=>{
     const amt = Number(d.amount)||0;
-    if(d.accountId && amt) creditAsset(d.accountId, amt, (d.subAccount && d.subAccount.trim()) || 'Checking');
+    if(d.accountId && amt) creditAsset(d.accountId, amt, resolveSubAccountName(d.accountId, d.subAccount));
   });
 }
 /** Snapshots current effective deposits, lets you mutate the item freely,
@@ -2448,16 +2541,17 @@ function applyIncomeCredits(deposits){
     passing through that spurious empty state, and as a bonus skips any
     row that didn't actually change. */
 function reconcileIncomeCredits(item, mutateFn){
-  const before = JSON.parse(JSON.stringify(effectiveDeposits(item)));
+  const before = JSON.parse(JSON.stringify(appliedDeposits(item)));
   mutateFn();
-  const after = effectiveDeposits(item);
+  item.posted = isDueToday(item.date);
+  const after = appliedDeposits(item);
 
-  const keyOf = d => d.accountId + '|' + ((d.subAccount && d.subAccount.trim()) || 'Checking');
+  const keyOf = d => d.accountId + '|' + (resolveSubAccountName(d.accountId, d.subAccount));
   const net = {};
   const tally = (list, sign) => list.forEach(d=>{
     if(!d.accountId) return;
     const k = keyOf(d);
-    if(!net[k]) net[k] = { accountId: d.accountId, subAccount: (d.subAccount && d.subAccount.trim()) || 'Checking', delta: 0 };
+    if(!net[k]) net[k] = { accountId: d.accountId, subAccount: resolveSubAccountName(d.accountId, d.subAccount), delta: 0 };
     net[k].delta += sign * (Number(d.amount)||0);
   });
   tally(before, -1);
@@ -2530,12 +2624,9 @@ function softDelete(collection, id, label){
   if(idx === -1) return;
   const item = arr[idx];
   if(collection==='expenses'){
-    const amt = Number(item.amount)||0;
-    const label = item.desc || item.category || 'Contribution';
-    if(item.creditAccountId) creditAsset(item.creditAccountId, -amt, label);
-    if(item.debitAccountId) creditAsset(item.debitAccountId, amt, label);
+    effectiveExpenseCredits(item).forEach(d=> creditAsset(d.accountId, -d.amount, resolveSubAccountName(d.accountId, d.subAccount)));
   } else if(collection==='incomes'){
-    reverseIncomeCredits(effectiveDeposits(item));
+    reverseIncomeCredits(appliedDeposits(item));
   }
   arr.splice(idx, 1);
   saveData();
@@ -2563,12 +2654,9 @@ document.getElementById('toastUndo').addEventListener('click', ()=>{
   const { collection, item, index } = undoStack;
   data[collection].splice(index, 0, item);
   if(collection==='expenses'){
-    const amt = Number(item.amount)||0;
-    const label = item.desc || item.category || 'Contribution';
-    if(item.creditAccountId) creditAsset(item.creditAccountId, amt, label);
-    if(item.debitAccountId) creditAsset(item.debitAccountId, -amt, label);
+    effectiveExpenseCredits(item).forEach(d=> creditAsset(d.accountId, d.amount, resolveSubAccountName(d.accountId, d.subAccount)));
   } else if(collection==='incomes'){
-    applyIncomeCredits(effectiveDeposits(item));
+    applyIncomeCredits(appliedDeposits(item));
   }
   saveData();
   undoStack = null;
@@ -4293,6 +4381,9 @@ function renderAccountsChart(){
 }
 
 function renderAll(){
+  // Catches a date rollover during a long-open session — an entry that was
+  // pending when the tab was opened may be due by now.
+  try { applyDuePostings(); } catch(e){ console.error('applyDuePostings failed', e); }
   // Each step runs independently — if one throws (e.g. a slow/blocked CDN leaves
   // Chart.js unavailable), it must not prevent the others from running. Without
   // this, a single failed chart render silently skipped the Dashboard goal rings
@@ -4439,6 +4530,7 @@ function renderExpenseRows(){
       <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(exp.desc)}" data-id="${exp.id}" data-field="desc">
       <input class="exp-date" type="date" value="${exp.date}" data-id="${exp.id}" data-field="date">
       <input class="exp-amount" type="number" value="${exp.amount}" data-id="${exp.id}" data-field="amount">
+      ${!exp.posted ? `<span class="pending-tag" title="Dated in the future — won't affect account balances until that date arrives">Pending</span>` : ''}
       <button type="button" class="more-btn" title="More">${ICON_MORE}</button>
       <button class="del" data-id="${exp.id}" title="Remove">${ICON_X}</button>
       <select class="exp-cat entry-more" data-id="${exp.id}" data-field="category">
@@ -4451,6 +4543,7 @@ function renderExpenseRows(){
         <option value="">Pays into: none</option>
         ${assetAccountOptions(exp.creditAccountId||'')}
       </select>
+      ${exp.category === 'Savings & Investments' && exp.creditAccountId ? subAccountSelectHtml(exp.id, exp.creditAccountId, exp.creditSubAccount, 'expense-subacct entry-more') : ''}
       <select class="exp-debit entry-more" data-id="${exp.id}" data-field="debitAccountId" title="Paid from account">
         <option value="">Paid from: none</option>
         ${assetAccountOptions(exp.debitAccountId||'')}
@@ -4467,6 +4560,15 @@ function bindEntryEvents(wrap, collection){
   });
   wrap.querySelectorAll('select.exp-cat, select.exp-freq, select.exp-credit, select.exp-debit').forEach(el=>{
     el.addEventListener('change', (e)=> onEntryFieldChange(e, collection));
+  });
+  wrap.querySelectorAll('.expense-subacct').forEach(el=>{
+    el.addEventListener('change', ()=>{
+      const item = data.expenses.find(x=>x.id===el.dataset.id);
+      if(!item) return;
+      reconcileExpenseCredits(item, ()=>{ item.creditSubAccount = el.value || ''; });
+      saveData();
+      renderRows(); renderSummary(); renderDashExpenses();
+    });
   });
   wrap.querySelectorAll('.del').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -4594,6 +4696,26 @@ function bindSplitEvents(wrap){
   });
 }
 
+/** Live-updates the "Pending" tag on a row without a full re-render, so
+    editing an entry's date doesn't lose typing focus but the tag still
+    reflects reality immediately. */
+function syncPendingTag(inputEl, item){
+  const row = inputEl.closest('.entry-row');
+  if(!row) return;
+  let tag = row.querySelector('.pending-tag');
+  if(item.posted){
+    if(tag) tag.remove();
+  } else if(!tag){
+    tag = document.createElement('span');
+    tag.className = 'pending-tag';
+    tag.title = "Dated in the future — won't affect account balances until that date arrives";
+    tag.textContent = 'Pending';
+    const moreBtn = row.querySelector('.more-btn');
+    if(moreBtn) row.insertBefore(tag, moreBtn);
+    else row.appendChild(tag);
+  }
+}
+
 function onEntryFieldChange(e, collection){
   const {id, field} = e.target.dataset;
   const item = data[collection].find(x=>x.id===id);
@@ -4603,27 +4725,28 @@ function onEntryFieldChange(e, collection){
   } else if(field==='frequency'){
     item.frequency = e.target.value;
     item.recurring = e.target.value !== 'one-time';
+  } else if(field==='category' && collection==='expenses'){
+    item.category = e.target.value;
+    renderExpenseRows(); // discrete change — shows/hides the sub-account picker when toggling to/from Savings & Investments
   } else if(field==='amount' && collection==='expenses'){
-    const prev = Number(item.amount)||0;
-    const delta = (Number(e.target.value)||0) - prev;
-    item.amount = Number(e.target.value)||0;
-    const label = item.desc || item.category || 'Contribution';
-    if(item.creditAccountId && delta) creditAsset(item.creditAccountId, delta, label);
-    if(item.debitAccountId && delta) creditAsset(item.debitAccountId, -delta, label);
+    reconcileExpenseCredits(item, ()=>{ item.amount = Number(e.target.value)||0; });
   } else if(field==='amount' && collection==='incomes'){
     reconcileIncomeCredits(item, ()=>{ item.amount = Number(e.target.value)||0; });
     updateSplitRemaining(item.id);
   } else if(field==='creditAccountId' && collection==='expenses'){
-    const prevAcc = item.creditAccountId || '';
-    item.creditAccountId = e.target.value || '';
-    applyExpenseCreditChange(item, item.amount, prevAcc, item.debitAccountId);
+    reconcileExpenseCredits(item, ()=>{ item.creditAccountId = e.target.value || ''; item.creditSubAccount = ''; });
+    renderExpenseRows(); // discrete change, not typing — safe to rebuild so the sub-account picker shows/hides correctly
   } else if(field==='creditAccountId' && collection==='incomes'){
     reconcileIncomeCredits(item, ()=>{ item.creditAccountId = e.target.value || ''; item.subAccount = ''; });
     renderIncomeRows(); // discrete change, not typing — safe to rebuild so the sub-account picker shows/hides correctly
   } else if(field==='debitAccountId' && collection==='expenses'){
-    const prevDebit = item.debitAccountId || '';
-    item.debitAccountId = e.target.value || '';
-    applyExpenseCreditChange(item, item.amount, item.creditAccountId, prevDebit);
+    reconcileExpenseCredits(item, ()=>{ item.debitAccountId = e.target.value || ''; });
+  } else if(field==='date' && collection==='expenses'){
+    reconcileExpenseCredits(item, ()=>{ item.date = e.target.value; });
+    syncPendingTag(e.target, item);
+  } else if(field==='date' && collection==='incomes'){
+    reconcileIncomeCredits(item, ()=>{ item.date = e.target.value; });
+    syncPendingTag(e.target, item);
   } else {
     item[field] = field==='amount' ? Number(e.target.value)||0 : e.target.value;
   }
@@ -4838,6 +4961,7 @@ function renderIncomeRows(){
       <input class="exp-desc" type="text" placeholder="Description" value="${escapeHtml(inc.desc)}" data-id="${inc.id}" data-field="desc">
       <input class="exp-date" type="date" value="${inc.date}" data-id="${inc.id}" data-field="date">
       <input class="exp-amount" type="number" value="${inc.amount}" data-id="${inc.id}" data-field="amount">
+      ${!inc.posted ? `<span class="pending-tag" title="Dated in the future — won't affect account balances until that date arrives">Pending</span>` : ''}
       <button type="button" class="more-btn" title="More">${ICON_MORE}</button>
       <button class="del" data-id="${inc.id}" title="Remove">${ICON_X}</button>
       <select class="exp-cat entry-more" data-id="${inc.id}" data-field="category">
@@ -5313,12 +5437,14 @@ document.getElementById('dashDetailsToggle').addEventListener('click', ()=>{
 });
 
 document.getElementById('addExpenseBtn').addEventListener('click', ()=>{
-  data.expenses.push({id:uid(), date:dateForActiveMonth(), category:EXPENSE_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time', creditAccountId:''});
+  const dt = dateForActiveMonth();
+  data.expenses.push({id:uid(), date:dt, category:EXPENSE_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time', creditAccountId:'', posted:isDueToday(dt)});
   saveData(); renderExpenseAll();
 });
 
 document.getElementById('addIncomeBtn').addEventListener('click', ()=>{
-  data.incomes.push({id:uid(), date:dateForActiveMonth(), category:INCOME_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time', creditAccountId:''});
+  const dt = dateForActiveMonth();
+  data.incomes.push({id:uid(), date:dt, category:INCOME_CATS[0], desc:'', amount:0, recurring:false, frequency:'one-time', creditAccountId:'', posted:isDueToday(dt)});
   saveData(); renderIncomeAll();
 });
 
@@ -5427,25 +5553,26 @@ document.getElementById('mSubmit').addEventListener('click', ()=>{
   const freqVal = (document.getElementById('mFreq') && document.getElementById('mFreq').value) || 'one-time';
   const creditId = (document.getElementById('mCredit') && document.getElementById('mCredit').value) || '';
   const debitId = (document.getElementById('mDebit') && document.getElementById('mDebit').value) || '';
+  const entryDate = document.getElementById('mDate').value || new Date().toISOString().slice(0,10);
   const entry = {
     id: uid(),
-    date: document.getElementById('mDate').value || new Date().toISOString().slice(0,10),
+    date: entryDate,
     category: document.getElementById('mCat').value,
     desc: document.getElementById('mDesc').value.trim(),
     amount,
     frequency: freqVal,
     recurring: freqVal !== 'one-time',
     creditAccountId: creditId,
-    debitAccountId: modalType === 'expense' ? debitId : ''
+    debitAccountId: modalType === 'expense' ? debitId : '',
+    posted: isDueToday(entryDate)
   };
   if(modalType === 'expense'){
     data.expenses.push(entry);
-    if(entry.creditAccountId) creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Contribution');
-    if(entry.debitAccountId) creditAsset(entry.debitAccountId, -entry.amount, entry.desc || entry.category || 'Contribution');
+    effectiveExpenseCredits(entry).forEach(d=> creditAsset(d.accountId, d.amount, resolveSubAccountName(d.accountId, d.subAccount)));
     saveData(); renderExpenseAll(); renderAll();
   } else {
     data.incomes.push(entry);
-    if(entry.creditAccountId) creditAsset(entry.creditAccountId, entry.amount, entry.desc || entry.category || 'Paycheck');
+    applyIncomeCredits(appliedDeposits(entry));
     saveData(); renderIncomeAll(); renderAll();
   }
   renderDashExpenses();
