@@ -1105,6 +1105,40 @@
   .acommit-line-amt.pos { color: var(--green); }
   .acommit-line-amt.neg { color: var(--red); }
   .acommit-line-empty { color: var(--text-tertiary); font-size: 11.5px; padding: 4px 0; }
+  .atransfer { font-weight: 500; font-size: 12px; }
+  .atransfer.pos { color: var(--green); }
+  .atransfer.neg { color: var(--red); }
+  .transfer-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .transfer-section h3 { font-size: 13px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+  .transfer-form {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .transfer-form select {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 8px 9px; border-radius: var(--radius-sm);
+    flex: 1; min-width: 110px;
+  }
+  .transfer-form select:focus { outline: none; border-color: var(--accent); }
+  .transfer-arrow { color: var(--text-tertiary); flex-shrink: 0; }
+  .transfer-form input {
+    width: 100px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 8px 9px; border-radius: var(--radius-sm);
+    text-align: right; flex-shrink: 0;
+  }
+  .transfer-form input:focus { outline: none; border-color: var(--accent); }
+  .transfer-form button { flex-shrink: 0; }
+  #transferList { margin-top: 8px; }
+  .transfer-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12.5px;
+  }
+  .transfer-row:last-child { border-bottom: none; }
+  .transfer-desc { color: var(--text-secondary); }
+  .transfer-del {
+    background: none; border: none; color: var(--text-tertiary); cursor: pointer;
+    padding: 4px; display: flex; align-items: center; flex-shrink: 0;
+  }
+  .transfer-del:hover { color: var(--red); }
   .alloc-subacct-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
   .alloc-subacct-toggle { min-width: 22px; min-height: 22px; font-size: 13px; }
   .alloc-subacct-label { font-size: 11.5px; color: var(--text-tertiary); }
@@ -1861,6 +1895,18 @@
       <div class="planner-hint" style="margin-top:8px;">Bills not explicitly tagged "Paid from" elsewhere will net against this account here, since that's realistically where they'll actually be paid from.</div>
       <div class="alloc-head" style="margin-top:12px;"><span>Account</span><span>Add</span><span>Projected</span></div>
       <div id="planAllocList"></div>
+      <div class="transfer-section">
+        <h3>Simulate a transfer</h3>
+        <div class="planner-hint" style="margin:0 0 8px;">Moves money between two accounts in this scenario — one goes down, the other up. Real balances still unchanged.</div>
+        <div class="transfer-form">
+          <select id="transferFrom"></select>
+          <span class="transfer-arrow">→</span>
+          <select id="transferTo"></select>
+          <input type="number" id="transferAmt" placeholder="Amount" step="any">
+          <button class="ghost" id="addTransferBtn" type="button">+ Add transfer</button>
+        </div>
+        <div id="transferList"></div>
+      </div>
       <div class="planner-remaining ok" id="planRemaining">
         <span>Remaining to allocate</span>
         <strong id="planRemainingVal">$0</strong>
@@ -2801,6 +2847,7 @@ function ensurePlanner(){
   });
   if(!data.planner.allocations || typeof data.planner.allocations !== 'object') data.planner.allocations = {};
   if(!data.planner.allocationSubAccount || typeof data.planner.allocationSubAccount !== 'object') data.planner.allocationSubAccount = {};
+  if(!Array.isArray(data.planner.transfers)) data.planner.transfers = [];
   if(typeof data.planner.defaultPayAccountId !== 'string') data.planner.defaultPayAccountId = '';
 }
 
@@ -3410,6 +3457,61 @@ function accountCommittedBreakdown(accId){
   return lines;
 }
 
+/** Net effect of all simulated transfers on a given account — negative for
+    every transfer moving money out of it, positive for every transfer
+    moving money in. Purely a what-if layered on top of accountCommittedNet
+    and the manual "Add" field; never touches real balances. */
+function transferNetForAccount(accId){
+  ensurePlanner();
+  let net = 0;
+  data.planner.transfers.forEach(t=>{
+    if(t.fromAccountId === accId) net -= Number(t.amount)||0;
+    if(t.toAccountId === accId) net += Number(t.amount)||0;
+  });
+  return Math.round(net*100)/100;
+}
+
+function renderTransferForm(){
+  ensurePlanner();
+  const fromSel = document.getElementById('transferFrom');
+  const toSel = document.getElementById('transferTo');
+  if(!fromSel || !toSel) return;
+  const assets = data.accounts.filter(a=>a.type==='asset');
+  const options = assets.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+  fromSel.innerHTML = options;
+  toSel.innerHTML = options;
+  if(assets.length > 1) toSel.selectedIndex = 1;
+}
+
+function renderTransferList(){
+  ensurePlanner();
+  const list = document.getElementById('transferList');
+  if(!list) return;
+  if(!data.planner.transfers.length){
+    list.innerHTML = '';
+    return;
+  }
+  list.innerHTML = data.planner.transfers.map(t=>{
+    const fromAcc = data.accounts.find(a=>a.id===t.fromAccountId);
+    const toAcc = data.accounts.find(a=>a.id===t.toAccountId);
+    return `
+      <div class="transfer-row">
+        <span class="transfer-desc">${fmt(t.amount)}: ${escapeHtml(fromAcc?fromAcc.name:'—')} → ${escapeHtml(toAcc?toAcc.name:'—')}</span>
+        <button type="button" class="transfer-del" data-id="${t.id}" title="Remove">${ICON_X}</button>
+      </div>
+    `;
+  }).join('');
+  list.querySelectorAll('.transfer-del').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ensurePlanner();
+      data.planner.transfers = data.planner.transfers.filter(t=>t.id!==btn.dataset.id);
+      saveData();
+      renderTransferList();
+      renderAllocList();
+    });
+  });
+}
+
 function renderAllocList(){
   ensurePlanner();
   const defSel = document.getElementById('planDefaultPayAcct');
@@ -3418,6 +3520,8 @@ function renderAllocList(){
     defSel.innerHTML = '<option value="">None — keep bills abstract from any account</option>' +
       cashAccounts.map(a=>`<option value="${a.id}" ${a.id===data.planner.defaultPayAccountId?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
   }
+  renderTransferForm();
+  renderTransferList();
   const allocList = document.getElementById('planAllocList');
   if(!allocList) return;
   const assets = data.accounts.filter(a=>a.type==='asset');
@@ -3429,14 +3533,15 @@ function renderAllocList(){
     const bal = accountBalance(a);
     const committed = accountCommittedNet(a.id);
     const add = Number(data.planner.allocations[a.id])||0;
-    const proj = bal + committed + add;
+    const xfer = transferNetForAccount(a.id);
+    const proj = bal + committed + add + xfer;
     const hasSubAccounts = a.holdings && a.holdings.length;
     const chosenSub = data.planner.allocationSubAccount[a.id] || '';
     return `
       <div class="alloc-row">
         <div>
           <div class="aname">${escapeHtml(a.name)}</div>
-          <div class="abal">Now ${fmt(bal)}${committed ? ` <button type="button" class="acommit ${committed>0?'pos':'neg'}" data-acc="${a.id}">${committed>0?'+':''}${fmt(committed)} planned</button>` : ''}</div>
+          <div class="abal">Now ${fmt(bal)}${committed ? ` <button type="button" class="acommit ${committed>0?'pos':'neg'}" data-acc="${a.id}">${committed>0?'+':''}${fmt(committed)} planned</button>` : ''}${xfer ? ` <span class="atransfer ${xfer>0?'pos':'neg'}">${xfer>0?'+':''}${fmt(xfer)} transfer</span>` : ''}</div>
           ${hasSubAccounts ? `
             <div class="alloc-subacct-row">
               <button type="button" class="paidfrom-toggle alloc-subacct-toggle ${chosenSub?'active':''}" data-acc="${a.id}" title="Allocate to a specific sub-account">${ICON_MORE}</button>
@@ -3498,7 +3603,7 @@ function renderAllocList(){
       document.getElementById('planLeftFig').textContent = fmt(left);
       const row = inp.closest('.alloc-row');
       const acc = data.accounts.find(a=>a.id===inp.dataset.aid);
-      if(row && acc) row.querySelector('.proj').textContent = fmt(accountBalance(acc) + accountCommittedNet(acc.id) + v);
+      if(row && acc) row.querySelector('.proj').textContent = fmt(accountBalance(acc) + accountCommittedNet(acc.id) + transferNetForAccount(acc.id) + v);
       const rem = document.getElementById('planRemaining');
       const remVal = document.getElementById('planRemainingVal');
       remVal.textContent = fmt(left);
@@ -3561,6 +3666,25 @@ function bindPlannerInputs(){
       if(targets[0]) data.planner.allocations[targets[0].id] = Math.round(((data.planner.allocations[targets[0].id]||0)+diff)*100)/100;
       saveData();
       renderPlanner();
+    });
+  }
+  const addTransfer = document.getElementById('addTransferBtn');
+  if(addTransfer && !addTransfer._bound){
+    addTransfer._bound = true;
+    addTransfer.addEventListener('click', ()=>{
+      ensurePlanner();
+      const fromSel = document.getElementById('transferFrom');
+      const toSel = document.getElementById('transferTo');
+      const amtInput = document.getElementById('transferAmt');
+      const fromId = fromSel && fromSel.value;
+      const toId = toSel && toSel.value;
+      const amt = Number(amtInput && amtInput.value) || 0;
+      if(!fromId || !toId || fromId === toId || amt <= 0) return;
+      data.planner.transfers.push({ id: uid(), fromAccountId: fromId, toAccountId: toId, amount: amt });
+      saveData();
+      if(amtInput) amtInput.value = '';
+      renderTransferList();
+      renderAllocList();
     });
   }
 }
