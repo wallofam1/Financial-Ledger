@@ -1044,6 +1044,15 @@
     min-height: 40px;
   }
   .paycheck-row input:focus { outline: none; border-color: var(--accent); }
+  .paycheck-auto-tag {
+    font-size: 10.5px; font-weight: 500; color: var(--accent); text-transform: none;
+  }
+  .paycheck-readonly {
+    width: 100%; background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--text-secondary); font-family: var(--font); font-size: 16px; font-weight: 500;
+    text-align: right; padding: 10px 12px; border-radius: var(--radius-sm); min-height: 40px;
+    box-sizing: border-box; cursor: help;
+  }
   .planner-total-row {
     display: flex;
     justify-content: space-between;
@@ -2907,9 +2916,38 @@ function paidFromBoxHtml(kind, pi, itemId, accountId, amount, fullAmount){
   return { toggle, body };
 }
 
+function periodIncomeTotal(p){
+  const incIds = new Set(p.dueIncomeIds || []);
+  return recurringItems('incomes').filter(x=>incIds.has(x.id)).reduce((s,x)=>s+(Number(x.amount)||0),0);
+}
+/** The single source of truth for "how much take-home this period" —
+    computed live from whatever's actually checked in "Income this
+    paycheck" whenever anything is checked, falling back to the manually
+    typed number only when nothing is. Always reading through this instead
+    of the raw stored p.income means the two can never drift apart, even if
+    something sets dueIncomeIds through a path other than the checkbox
+    handler that keeps p.income in sync. */
+function periodEffectiveIncome(p){
+  return (p.dueIncomeIds && p.dueIncomeIds.length) ? periodIncomeTotal(p) : (Number(p.income)||0);
+}
 function periodDueTotal(p){
   const ids = new Set(p.dueIds || []);
   return recurringItems('expenses').filter(x=>ids.has(x.id)).reduce((s,x)=>s+(Number(x.amount)||0),0);
+}
+/** Accounts this period's checked-due paychecks actually deposit into. A
+    "Paid from" reserve tag only means what it claims — money already
+    sitting there, separate from this paycheck — when the reserve account
+    ISN'T one of these. If it is, that money is this paycheck by another
+    name, and tagging it as reserve would silently double it: once as
+    "already covered" (inflating the top-line surplus) and once as real
+    money landing in the account. */
+function periodPaycheckAccounts(p){
+  const incIds = new Set(p.dueIncomeIds || []);
+  const accounts = new Set();
+  recurringItems('incomes').filter(x=>incIds.has(x.id)).forEach(inc=>{
+    effectiveDeposits(inc).forEach(d=>{ if(d.accountId) accounts.add(d.accountId); });
+  });
+  return accounts;
 }
 /** Due bills split by funding source, with a partial amount per bill — a bill
     can be part-covered by an account you choose right here in the Planner and
@@ -2917,17 +2955,21 @@ function periodDueTotal(p){
     still due from this check). p.billPaidFrom maps billId -> {accountId,
     amount}; anything not covered there falls to the paycheck by default.
     This is independent of Cash Flow's own "Paid from" field — the choice
-    lives in the Planner so it applies to every expense the same way. */
+    lives in the Planner so it applies to every expense the same way. A
+    reserve tag pointing at an account this same paycheck deposits into is
+    treated as not-a-reserve — see periodPaycheckAccounts above. */
 function periodDueSplit(p){
   const ids = new Set(p.dueIds || []);
   const paidFrom = p.billPaidFrom || {};
+  const paycheckAccounts = periodPaycheckAccounts(p);
   const due = recurringItems('expenses').filter(x=>ids.has(x.id));
   let paycheckTotal = 0, reserveTotal = 0;
   const paycheck = [], reserve = [];
   due.forEach(x=>{
     const amt = Number(x.amount)||0;
     const pf = paidFrom[x.id];
-    const res = (pf && pf.accountId) ? Math.min(Number(pf.amount)||0, amt) : 0;
+    const isGenuineReserve = pf && pf.accountId && !paycheckAccounts.has(pf.accountId);
+    const res = isGenuineReserve ? Math.min(Number(pf.amount)||0, amt) : 0;
     const pay = Math.max(0, amt - res);
     if(res > 0){ reserveTotal += res; reserve.push({ ...x, reserveAmount: res, debitAccountId: pf.accountId }); }
     if(pay > 0){ paycheckTotal += pay; paycheck.push({ ...x, amount: pay }); }
@@ -2935,21 +2977,29 @@ function periodDueSplit(p){
   return { paycheckTotal: Math.round(paycheckTotal*100)/100, reserveTotal: Math.round(reserveTotal*100)/100, paycheck, reserve };
 }
 /** For a period's "extra expenses": the paycheck only needs to cover
-    amount minus whatever's been earmarked from an existing reserve account. */
-function extraPaycheckAmount(e){
+    amount minus whatever's been earmarked from a GENUINELY separate
+    reserve account — same same-account exception as periodDueSplit. */
+function extraPaycheckAmount(e, paycheckAccounts){
   const amt = Number(e.amount)||0;
-  const res = Math.min(Number(e.reserveAmount)||0, amt);
+  const isGenuineReserve = e.reserveAccountId && !(paycheckAccounts && paycheckAccounts.has(e.reserveAccountId));
+  const res = isGenuineReserve ? Math.min(Number(e.reserveAmount)||0, amt) : 0;
   return Math.max(0, amt - res);
 }
 function periodExpenseTotal(p){
-  const extras = (p.expenses||[]).reduce((s,e)=>s+extraPaycheckAmount(e),0);
+  const paycheckAccounts = periodPaycheckAccounts(p);
+  const extras = (p.expenses||[]).reduce((s,e)=>s+extraPaycheckAmount(e, paycheckAccounts),0);
   return extras + periodDueSplit(p).paycheckTotal;
 }
 /** Total being drawn from existing reserve accounts this period — due bills
     tagged "Paid from" plus any partial reserve splits on extra expenses. */
 function periodReserveTotal(p){
   const dueReserve = periodDueSplit(p).reserveTotal;
-  const extraReserve = (p.expenses||[]).reduce((s,e)=>s+Math.min(Number(e.reserveAmount)||0, Number(e.amount)||0),0);
+  const paycheckAccounts = periodPaycheckAccounts(p);
+  const extraReserve = (p.expenses||[]).reduce((s,e)=>{
+    const amt = Number(e.amount)||0;
+    const isGenuineReserve = e.reserveAccountId && !paycheckAccounts.has(e.reserveAccountId);
+    return s + (isGenuineReserve ? Math.min(Number(e.reserveAmount)||0, amt) : 0);
+  },0);
   return dueReserve + extraReserve;
 }
 /** Rolls up, per account, how much is committed against it across all
@@ -3047,7 +3097,7 @@ function accountCommittedNet(accId){
 
 function plannerGross(){
   ensurePlanner();
-  return data.planner.periods.reduce((s,p)=>s+(Number(p.income)||0),0);
+  return data.planner.periods.reduce((s,p)=>s+periodEffectiveIncome(p),0);
 }
 
 function plannerExpenses(){
@@ -3109,7 +3159,7 @@ function renderPlanner(){
   wrap.innerHTML = data.planner.periods.map((p, i)=>{
     const pExp = periodExpenseTotal(p);
     const pRes = periodReserveTotal(p);
-    const pNet = (Number(p.income)||0) - pExp;
+    const pNet = periodEffectiveIncome(p) - pExp;
     const dueSet = new Set(p.dueIds || []);
     const paidFrom = p.billPaidFrom || {};
     const rec = recurringItems('expenses');
@@ -3171,7 +3221,7 @@ function renderPlanner(){
             <input type="text" class="period-title-input" data-pi="${i}" data-field="title" value="${escapeHtml(p.title||'')}" placeholder="${titlePlaceholder}">
             <span class="pnet">${fmt(pNet)}</span>
           </div>
-          <div class="period-collapsed-summary">Take-home ${fmt(p.income||0)} · Bills + extras ${fmt(pExp)}${pRes>0?` · ${fmt(pRes)} from reserves`:''}</div>
+          <div class="period-collapsed-summary">Take-home ${fmt(periodEffectiveIncome(p))} · Bills + extras ${fmt(pExp)}${pRes>0?` · ${fmt(pRes)} from reserves`:''}</div>
         </div>
       `;
     }
@@ -3183,8 +3233,11 @@ function renderPlanner(){
           <span class="pnet">${fmt(pNet)}</span>
         </div>
         <div class="paycheck-row">
-          <label>Take-home</label>
-          <input type="number" data-pi="${i}" data-field="income" value="${p.income||''}" step="any" placeholder="0">
+          <label>Take-home${(p.dueIncomeIds||[]).length ? ' <span class="paycheck-auto-tag">= checked income</span>' : ''}</label>
+          ${(p.dueIncomeIds||[]).length
+            ? `<div class="paycheck-readonly" title="Auto-set from Income this paycheck below — uncheck everything to type a number manually">${fmt(periodEffectiveIncome(p))}</div>`
+            : `<input type="number" data-pi="${i}" data-field="income" value="${p.income||''}" step="any" placeholder="0">`
+          }
         </div>
         <div style="font-size:12px;color:var(--text-tertiary);margin:4px 0 6px;">Income this paycheck</div>
         <div class="period-due-list">${incomeRows}</div>
@@ -3232,7 +3285,7 @@ function renderPlanner(){
       if(card){
         const p = data.planner.periods[i];
         const pExp = periodExpenseTotal(p);
-        const pNet = (Number(p.income)||0) - pExp;
+        const pNet = periodEffectiveIncome(p) - pExp;
         const netEl = card.querySelector('.pnet');
         if(netEl) netEl.textContent = fmt(pNet);
       }
@@ -3255,14 +3308,14 @@ function renderPlanner(){
       if(card){
         const p = data.planner.periods[i];
         const pExp = periodExpenseTotal(p);
-        const pNet = (Number(p.income)||0) - pExp;
+        const pNet = periodEffectiveIncome(p) - pExp;
         const netEl = card.querySelector('.pnet');
         if(netEl) netEl.textContent = fmt(pNet);
         const sub = card.querySelector('.period-subtotal span:last-child');
         if(sub) sub.textContent = fmt(pExp);
         if(e.reserveAccountId){
           const note = card.querySelector(`.period-exp-wrap[data-eid="${e.id}"] .pexp-reserve-note`);
-          if(note) note.textContent = `→ ${fmt(extraPaycheckAmount(e))} from paycheck`;
+          if(note) note.textContent = `→ ${fmt(extraPaycheckAmount(e, periodPaycheckAccounts(p)))} from paycheck`;
         }
       }
       renderReservePanel();
@@ -3352,7 +3405,7 @@ function renderPlanner(){
       const card = inp.closest('.period-card');
       if(card){
         const pExp = periodExpenseTotal(p);
-        const pNet = (Number(p.income)||0) - pExp;
+        const pNet = periodEffectiveIncome(p) - pExp;
         const netEl = card.querySelector('.pnet');
         if(netEl) netEl.textContent = fmt(pNet);
         const sub = card.querySelector('.period-subtotal span:last-child');
@@ -3390,9 +3443,13 @@ function renderPlanner(){
       ensurePlanner();
       const i = Number(cb.dataset.pi);
       const id = cb.dataset.dueIncome;
-      const set = new Set(data.planner.periods[i].dueIncomeIds || []);
+      const p = data.planner.periods[i];
+      const set = new Set(p.dueIncomeIds || []);
       if(cb.checked) set.add(id); else set.delete(id);
-      data.planner.periods[i].dueIncomeIds = [...set];
+      p.dueIncomeIds = [...set];
+      // Take-home tracks whatever's actually checked here, so the two can
+      // never silently drift apart the way a separately-typed number could.
+      if(p.dueIncomeIds.length) p.income = periodIncomeTotal(p);
       saveData();
       renderPlanner();
     });
@@ -5443,13 +5500,14 @@ function findingPlannerShortfall(){
   for(let i=0;i<periods.length;i++){
     const p = periods[i];
     const pExp = periodExpenseTotal(p);
-    const pNet = (Number(p.income)||0) - pExp;
-    if((Number(p.income)||0) > 0 && pNet < 0){
+    const pNet = periodEffectiveIncome(p) - pExp;
+    if(periodEffectiveIncome(p) > 0 && pNet < 0){
       const { paycheck } = periodDueSplit(p); // only bills actually drawing on this paycheck
       const extraItems = p.expenses||[];
+      const paycheckAccounts = periodPaycheckAccounts(p);
       const allItems = [
         ...paycheck.map(x=>({desc:x.desc||x.category||'Bill', amount:Number(x.amount)||0})),
-        ...extraItems.map(x=>({desc:x.desc||'Expense', amount:extraPaycheckAmount(x)}))
+        ...extraItems.map(x=>({desc:x.desc||'Expense', amount:extraPaycheckAmount(x, paycheckAccounts)}))
       ].sort((a,b)=>b.amount-a.amount);
       const biggest = allItems[0];
       const label = p.title && p.title.trim() ? p.title.trim() : 'Period ' + (i+1);
