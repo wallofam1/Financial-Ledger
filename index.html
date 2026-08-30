@@ -969,12 +969,12 @@
   .split-remaining.ok { color: var(--green); }
   .split-remaining.off { color: var(--amber); }
   .split-subacct-row { padding: 0 0 8px; }
-  .split-subacct, .income-subacct {
+  .split-subacct, .income-subacct, .expense-subacct, .alloc-subacct-select {
     background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary);
     font-family: var(--font); font-size: 12px; padding: 9px 8px; border-radius: var(--radius-sm);
     min-height: 38px;
   }
-  .split-subacct:focus, .income-subacct:focus { outline: none; border-color: var(--accent); }
+  .split-subacct:focus, .income-subacct:focus, .expense-subacct:focus, .alloc-subacct-select:focus { outline: none; border-color: var(--accent); }
   .split-subacct { width: 100%; }
   .income-subacct { margin-top: 6px; width: 150px; }
 
@@ -1082,9 +1082,34 @@
     font-size: 12px;
     color: var(--text-tertiary);
   }
-  .acommit { font-weight: 500; }
+  .acommit {
+    font-weight: 500; background: none; border: none; padding: 0; font-family: var(--font);
+    font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  }
   .acommit.pos { color: var(--green); }
   .acommit.neg { color: var(--red); }
+  .acommit-breakdown {
+    background: var(--bg-input); border-radius: var(--radius-sm);
+    padding: 8px 10px; margin: 4px 0 10px;
+  }
+  .acommit-line {
+    display: flex; align-items: baseline; gap: 8px; padding: 5px 0;
+    border-bottom: 1px solid var(--border); font-size: 11.5px;
+  }
+  .acommit-line:last-child { border-bottom: none; }
+  .acommit-line-period {
+    color: var(--text-tertiary); flex-shrink: 0; min-width: 60px;
+  }
+  .acommit-line-label { color: var(--text-secondary); flex: 1; min-width: 0; }
+  .acommit-line-amt { font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+  .acommit-line-amt.pos { color: var(--green); }
+  .acommit-line-amt.neg { color: var(--red); }
+  .acommit-line-empty { color: var(--text-tertiary); font-size: 11.5px; padding: 4px 0; }
+  .alloc-subacct-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .alloc-subacct-toggle { min-width: 22px; min-height: 22px; font-size: 13px; }
+  .alloc-subacct-label { font-size: 11.5px; color: var(--text-tertiary); }
+  .alloc-subacct-box { padding: 0 0 10px; }
+  .alloc-subacct-box select { width: 100%; }
   .alloc-row input {
     width: 100%;
     background: var(--bg-input);
@@ -2775,6 +2800,7 @@ function ensurePlanner(){
     return p;
   });
   if(!data.planner.allocations || typeof data.planner.allocations !== 'object') data.planner.allocations = {};
+  if(!data.planner.allocationSubAccount || typeof data.planner.allocationSubAccount !== 'object') data.planner.allocationSubAccount = {};
   if(typeof data.planner.defaultPayAccountId !== 'string') data.planner.defaultPayAccountId = '';
 }
 
@@ -3335,6 +3361,55 @@ function renderPlanner(){
   renderReservePanel();
 }
 
+/** Line-by-line version of accountCommittedNet — every entry contributing
+    to that number, tagged with which period it's from, so the total isn't
+    a black box you have to reverse-engineer by hand across four cards. */
+function accountCommittedBreakdown(accId){
+  ensurePlanner();
+  const isDefaultPayAcct = data.planner.defaultPayAccountId && data.planner.defaultPayAccountId === accId;
+  const lines = [];
+  data.planner.periods.forEach((p, i)=>{
+    const periodLabel = (p.title && p.title.trim()) ? p.title.trim() : 'Period ' + (i+1);
+    const incIds = new Set(p.dueIncomeIds || []);
+    recurringItems('incomes').filter(x=>incIds.has(x.id)).forEach(inc=>{
+      effectiveDeposits(inc).forEach(d=>{
+        if(d.accountId === accId && Number(d.amount)){
+          lines.push({ period: periodLabel, label: (inc.desc||inc.category||'Income') + ' — deposit', amount: Number(d.amount), positive: true });
+        }
+      });
+    });
+    const ids = new Set(p.dueIds || []);
+    const paidFrom = p.billPaidFrom || {};
+    recurringItems('expenses').filter(x=>ids.has(x.id)).forEach(x=>{
+      const amt = Number(x.amount)||0;
+      if(x.creditAccountId === accId && amt){
+        lines.push({ period: periodLabel, label: (x.desc||x.category||'Bill') + ' — pays into', amount: amt, positive: true });
+      }
+      const pf = paidFrom[x.id];
+      const explicitRes = (pf && pf.accountId) ? Math.min(Number(pf.amount)||0, amt) : 0;
+      if(pf && pf.accountId === accId && explicitRes){
+        lines.push({ period: periodLabel, label: (x.desc||x.category||'Bill') + ' — paid from', amount: explicitRes, positive: false });
+      }
+      const defaultPortion = Math.max(0, amt - explicitRes);
+      if(isDefaultPayAcct && defaultPortion){
+        lines.push({ period: periodLabel, label: (x.desc||x.category||'Bill') + ' — default bill-pay', amount: defaultPortion, positive: false });
+      }
+    });
+    (p.expenses||[]).forEach(e=>{
+      const amt = Number(e.amount)||0;
+      const explicitRes = e.reserveAccountId ? Math.min(Number(e.reserveAmount)||0, amt) : 0;
+      if(e.reserveAccountId === accId && explicitRes){
+        lines.push({ period: periodLabel, label: (e.desc||'Expense') + ' — paid from', amount: explicitRes, positive: false });
+      }
+      const defaultPortion = Math.max(0, amt - explicitRes);
+      if(isDefaultPayAcct && defaultPortion){
+        lines.push({ period: periodLabel, label: (e.desc||'Expense') + ' — default bill-pay', amount: defaultPortion, positive: false });
+      }
+    });
+  });
+  return lines;
+}
+
 function renderAllocList(){
   ensurePlanner();
   const defSel = document.getElementById('planDefaultPayAcct');
@@ -3355,17 +3430,63 @@ function renderAllocList(){
     const committed = accountCommittedNet(a.id);
     const add = Number(data.planner.allocations[a.id])||0;
     const proj = bal + committed + add;
+    const hasSubAccounts = a.holdings && a.holdings.length;
+    const chosenSub = data.planner.allocationSubAccount[a.id] || '';
     return `
       <div class="alloc-row">
         <div>
           <div class="aname">${escapeHtml(a.name)}</div>
-          <div class="abal">Now ${fmt(bal)}${committed ? ` <span class="acommit ${committed>0?'pos':'neg'}">${committed>0?'+':''}${fmt(committed)} planned</span>` : ''}</div>
+          <div class="abal">Now ${fmt(bal)}${committed ? ` <button type="button" class="acommit ${committed>0?'pos':'neg'}" data-acc="${a.id}">${committed>0?'+':''}${fmt(committed)} planned</button>` : ''}</div>
+          ${hasSubAccounts ? `
+            <div class="alloc-subacct-row">
+              <button type="button" class="paidfrom-toggle alloc-subacct-toggle ${chosenSub?'active':''}" data-acc="${a.id}" title="Allocate to a specific sub-account">${ICON_MORE}</button>
+              ${chosenSub ? `<span class="alloc-subacct-label">→ ${escapeHtml(chosenSub)}</span>` : ''}
+            </div>
+          ` : ''}
         </div>
         <input type="number" step="any" data-aid="${a.id}" value="${add||''}" placeholder="0">
         <div class="proj">${fmt(proj)}</div>
       </div>
+      <div class="acommit-breakdown" id="acommit-breakdown-${a.id}" style="display:none;"></div>
+      ${hasSubAccounts ? `<div class="alloc-subacct-box" id="alloc-subacct-box-${a.id}" style="display:none;">${subAccountSelectHtml(a.id, a.id, chosenSub, 'alloc-subacct-select')}</div>` : ''}
     `;
   }).join('');
+  allocList.querySelectorAll('.alloc-subacct-toggle').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const box = document.getElementById('alloc-subacct-box-' + btn.dataset.acc);
+      if(!box) return;
+      box.style.display = (box.style.display !== 'none') ? 'none' : 'block';
+    });
+  });
+  allocList.querySelectorAll('.alloc-subacct-select').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      ensurePlanner();
+      if(sel.value) data.planner.allocationSubAccount[sel.dataset.id] = sel.value;
+      else delete data.planner.allocationSubAccount[sel.dataset.id];
+      saveData();
+      renderAllocList();
+    });
+  });
+  allocList.querySelectorAll('.acommit').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const box = document.getElementById('acommit-breakdown-' + btn.dataset.acc);
+      if(!box) return;
+      const isOpen = box.style.display !== 'none';
+      if(isOpen){
+        box.style.display = 'none';
+        return;
+      }
+      const lines = accountCommittedBreakdown(btn.dataset.acc);
+      box.innerHTML = lines.length ? lines.map(l=>`
+        <div class="acommit-line">
+          <span class="acommit-line-period">${escapeHtml(l.period)}</span>
+          <span class="acommit-line-label">${escapeHtml(l.label)}</span>
+          <span class="acommit-line-amt ${l.positive?'pos':'neg'}">${l.positive?'+':'−'}${fmt(l.amount)}</span>
+        </div>
+      `).join('') : '<div class="acommit-line-empty">Nothing contributing right now.</div>';
+      box.style.display = 'block';
+    });
+  });
   allocList.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input', ()=>{
       ensurePlanner();
