@@ -2883,6 +2883,30 @@ function periodReserveTotal(p){
     periods (due bills paid from it + extra-expense reserve splits) versus
     what's actually sitting in it right now. This is the "how much do I need
     in this account" answer. */
+/** Sum of committed paycheck deposits into this account across all periods
+    — the "Income this paycheck" entries checked in Planner, regardless of
+    which period. Shared by "Allocate projected net" and "Reserve funds
+    needed", so a reserve commitment isn't flagged short just because the
+    paycheck that's meant to cover it hasn't landed yet. */
+function pendingIncomeInto(accId){
+  ensurePlanner();
+  let total = 0;
+  data.planner.periods.forEach(p=>{
+    const incIds = new Set(p.dueIncomeIds || []);
+    const dueIncomes = recurringItems('incomes').filter(x=>incIds.has(x.id));
+    dueIncomes.forEach(inc=>{
+      effectiveDeposits(inc).forEach(d=>{
+        if(d.accountId === accId) total += Number(d.amount)||0;
+      });
+    });
+  });
+  return Math.round(total*100)/100;
+}
+
+/** "Have" here means real balance plus any paycheck already committed to
+    land in this account (via "Income this paycheck") — not just today's
+    snapshot. That paycheck money is just as real a source of coverage as
+    what's sitting there already, once you've told the Planner it's coming. */
 function reserveAccountNeeds(){
   ensurePlanner();
   const needs = {}; // accountId -> amount
@@ -2903,7 +2927,9 @@ function reserveAccountNeeds(){
     if(!acc) return null;
     const needed = Math.round(needs[accId]*100)/100;
     const balance = accountBalance(acc);
-    return { accountId: accId, name: acc.name, needed, balance, shortfall: Math.round((needed-balance)*100)/100 };
+    const incoming = pendingIncomeInto(accId);
+    const available = Math.round((balance + incoming)*100)/100;
+    return { accountId: accId, name: acc.name, needed, balance, incoming, available, shortfall: Math.round((needed-available)*100)/100 };
   }).filter(Boolean).sort((a,b)=> b.shortfall - a.shortfall);
 }
 /** Net effect already planned for a given account across all periods, from
@@ -2922,7 +2948,7 @@ function reserveAccountNeeds(){
     would overstate what's actually left to allocate. */
 function accountCommittedNet(accId){
   ensurePlanner();
-  let net = 0;
+  let net = pendingIncomeInto(accId);
   const isDefaultPayAcct = data.planner.defaultPayAccountId && data.planner.defaultPayAccountId === accId;
   data.planner.periods.forEach(p=>{
     const ids = new Set(p.dueIds || []);
@@ -2941,13 +2967,6 @@ function accountCommittedNet(accId){
       const explicitRes = e.reserveAccountId ? Math.min(Number(e.reserveAmount)||0, amt) : 0;
       if(e.reserveAccountId === accId) net -= explicitRes;
       if(isDefaultPayAcct) net -= Math.max(0, amt - explicitRes);
-    });
-    const incIds = new Set(p.dueIncomeIds || []);
-    const dueIncomes = recurringItems('incomes').filter(x=>incIds.has(x.id));
-    dueIncomes.forEach(inc=>{
-      effectiveDeposits(inc).forEach(d=>{
-        if(d.accountId === accId) net += Number(d.amount)||0;
-      });
     });
   });
   return Math.round(net*100)/100;
@@ -2988,7 +3007,7 @@ function renderReservePanel(){
       <div class="reserve-row">
         <div class="rname">${escapeHtml(n.name)}</div>
         <div class="rmath">
-          <span class="rhave">Have ${fmt(n.balance)}</span>
+          <span class="rhave">Have ${fmt(n.balance)}${n.incoming > 0 ? ` + ${fmt(n.incoming)} incoming` : ''}</span>
           <span class="rneed">Need ${fmt(n.needed)}</span>
           <span class="rstatus ${short?'warn':'ok'}">${short ? fmt(n.shortfall)+' short' : 'Covered'}</span>
         </div>
@@ -5203,9 +5222,10 @@ function findingReserveShortfall(){
   const needs = reserveAccountNeeds();
   const short = needs.find(n=>n.shortfall > 0.005);
   if(!short) return null;
+  const haveText = short.incoming > 0 ? `${fmt(short.balance)} plus ${fmt(short.incoming)} incoming` : fmt(short.balance);
   return {
     id: 'reserve-shortfall-' + short.accountId, domain: 'planner', severity: 3,
-    text: `${short.name} is ${fmt(short.shortfall)} short of what's already assigned to it — you have ${fmt(short.balance)}, ${fmt(short.needed)} is spoken for.`
+    text: `${short.name} is ${fmt(short.shortfall)} short of what's already assigned to it — you have ${haveText}, ${fmt(short.needed)} is spoken for.`
   };
 }
 
