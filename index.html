@@ -2071,6 +2071,8 @@ function loadDataLocal(){
 let data = loadDataLocal();
 if(!data.expenses) data.expenses = [];
 if(!data.incomes) data.incomes = [];
+if(!data.accounts) data.accounts = [];
+if(!data.history) data.history = [];
 if(!data._updatedAt) data._updatedAt = new Date().toISOString();
 if(!data.planner) data.planner = { periods: null, allocations:{} };
 
@@ -2080,6 +2082,57 @@ if(!data.planner) data.planner = { periods: null, allocations:{} };
 // already real for existing users.
 data.expenses.forEach(x=>{ if(typeof x.posted !== 'boolean') x.posted = true; });
 data.incomes.forEach(x=>{ if(typeof x.posted !== 'boolean') x.posted = true; });
+
+/** One-time cleanup: before the resolveSubAccountName fix, linking a
+    transaction to an account that already had sub-accounts created a
+    brand-new stray sub-account named after that transaction's own
+    description, instead of landing in a sensible default — e.g. a "Rent"
+    bill paid from an account with real "Checking"/"Savings" sub-accounts
+    would spawn its own "Rent" holding. This finds any holding whose name
+    exactly matches a transaction linked to that same account and folds its
+    dollar value back into the correct default sub-account (or the flat
+    balance, if there's no other real sub-account left) — same total money,
+    just consolidated instead of scattered into one fake holding per bill.
+    Runs once, ever, marked by a flag, so a sub-account someone deliberately
+    names after a bill later on is never touched. */
+function cleanupStrayCreditHoldings(){
+  if(data._strayHoldingsCleanedUp) return;
+  data.accounts.forEach(acc=>{
+    if(!acc.holdings || !acc.holdings.length) return;
+    const linkedDescs = new Set();
+    data.expenses.forEach(x=>{
+      if(x.creditAccountId===acc.id || x.debitAccountId===acc.id){
+        const d = (x.desc||'').trim().toLowerCase();
+        if(d) linkedDescs.add(d);
+      }
+    });
+    data.incomes.forEach(x=>{
+      const d = (x.desc||'').trim().toLowerCase();
+      if(!d) return;
+      if(x.creditAccountId===acc.id) linkedDescs.add(d);
+      (x.deposits||[]).forEach(dep=>{ if(dep.accountId===acc.id) linkedDescs.add(d); });
+    });
+    if(!linkedDescs.size) return;
+    const strays = acc.holdings.filter(h=> linkedDescs.has((h.name||'').trim().toLowerCase()));
+    if(!strays.length) return;
+    const strayTotal = strays.reduce((s,h)=>s+(Number(h.value)||0),0);
+    acc.holdings = acc.holdings.filter(h=> !strays.includes(h));
+    if(acc.holdings.length){
+      const targetName = resolveSubAccountName(acc.id, '');
+      let target = acc.holdings.find(h=>(h.name||'').trim().toLowerCase() === targetName.toLowerCase());
+      if(!target){
+        target = { id: uid(), name: targetName, ticker:'', units:0, value:0 };
+        acc.holdings.push(target);
+      }
+      target.value = Math.round(((Number(target.value)||0) + strayTotal) * 100) / 100;
+    } else {
+      acc.balance = Math.round(((Number(acc.balance)||0) + strayTotal) * 100) / 100;
+    }
+    acc.balance = accountBalance(acc);
+  });
+  data._strayHoldingsCleanedUp = true;
+  saveData();
+}
 
 /** Entries created as pending (future-dated) whose date has since arrived
     get applied now — the same way a real transaction clears once its date
@@ -2104,7 +2157,6 @@ function applyDuePostings(){
   });
   if(changed) saveData();
 }
-applyDuePostings();
 
 let chart, accountsChart, expenseChart, incomeChart;
 
@@ -2113,6 +2165,12 @@ let supabaseClient = null;
 let syncCfg = null;
 let syncEnabled = false;
 let pullTimer = null;
+
+// Both of these save data (cleanup always, postings conditionally), which
+// can push to cloud sync — so they must run after the sync variables above
+// are declared, not up where the migrations happen.
+cleanupStrayCreditHoldings();
+applyDuePostings();
 
 function loadSyncCfg(){
   try{
@@ -2396,9 +2454,11 @@ function assetAccountOptions(selectedId){
 /** Resolves which sub-account name a deposit/credit should actually use: an
     explicit user choice always wins; otherwise, prefer an existing
     sub-account whose name contains "checking" (handles "Joint Checking" as
-    well as plain "Checking"); otherwise fall back to whichever sub-account
-    already exists, rather than inventing an unrelated new one; only a
-    truly empty account falls back to creating "Checking" fresh. */
+    well as plain "Checking"); otherwise default to "Checking" — creating it
+    fresh if needed — rather than guessing at an existing, possibly
+    specific-purpose holding like "Savings" that happens to be first in the
+    list. Only an explicit sub-account choice should ever land funds
+    somewhere other than the generic default. */
 function resolveSubAccountName(accId, explicitName){
   const trimmed = (explicitName||'').trim();
   if(trimmed) return trimmed;
@@ -2406,7 +2466,7 @@ function resolveSubAccountName(accId, explicitName){
   if(!acc || !acc.holdings || !acc.holdings.length) return 'Checking';
   const names = acc.holdings.map(h=>(h.name||'').trim()).filter(Boolean);
   const checkingMatch = names.find(n=>n.toLowerCase().includes('checking'));
-  return checkingMatch || names[0] || 'Checking';
+  return checkingMatch || 'Checking';
 }
 
 function subAccountSelectHtml(itemId, accId, selectedName, cls, extraAttr){
