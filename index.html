@@ -1104,6 +1104,17 @@
     text-align: right;
     color: var(--text-secondary);
   }
+  .default-pay-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 12px; flex-wrap: wrap;
+  }
+  .default-pay-row label { font-size: 12.5px; color: var(--text-secondary); flex-shrink: 0; }
+  .default-pay-row select {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--font); font-size: 12.5px; padding: 8px 10px; border-radius: var(--radius-sm);
+    max-width: 260px; min-width: 160px;
+  }
+  .default-pay-row select:focus { outline: none; border-color: var(--accent); }
   .alloc-head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 100px 110px;
@@ -1802,6 +1813,13 @@
     <div class="section" style="margin-top:8px;">
       <h2>Allocate projected net</h2>
       <div class="planner-hint">Drop the combined net into accounts to see ending balances. Scenario only — real balances unchanged.</div>
+      <div class="default-pay-row">
+        <label for="planDefaultPayAcct">Default bill-pay account</label>
+        <select id="planDefaultPayAcct">
+          <option value="">None — keep bills abstract from any account</option>
+        </select>
+      </div>
+      <div class="planner-hint" style="margin-top:-4px;">Bills not explicitly tagged "Paid from" elsewhere will net against this account here, since that's realistically where they'll actually be paid from.</div>
       <div class="alloc-head" style="margin-top:12px;"><span>Account</span><span>Add</span><span>Projected</span></div>
       <div id="planAllocList"></div>
       <div class="planner-remaining ok" id="planRemaining">
@@ -2609,6 +2627,7 @@ function ensurePlanner(){
     return p;
   });
   if(!data.planner.allocations || typeof data.planner.allocations !== 'object') data.planner.allocations = {};
+  if(typeof data.planner.defaultPayAccountId !== 'string') data.planner.defaultPayAccountId = '';
 }
 
 function halfMonthRecurringExpenses(){
@@ -2742,29 +2761,38 @@ function reserveAccountNeeds(){
 /** Net effect already planned for a given account across all periods, from
     money the Planner already knows is moving: bills that pay INTO this
     account (their full amount, via "Pays into") minus whatever's being
-    drawn OUT of this account to cover bills/expenses (via the reserve
-    splits above), plus any paycheck deposits (single-account or split)
+    drawn OUT of this account to cover bills/expenses (via the "Paid from"
+    tags above), plus any paycheck deposits (single-account or split)
     checked as due this period. This is what "Allocate projected net"
-    should already reflect before the user types anything into Add. */
+    should already reflect before the user types anything into Add.
+
+    If this account is designated the Planner's default bill-pay account,
+    it also nets out every due bill/extra expense that's still on the
+    implicit "pay from paycheck" default (i.e. not explicitly tagged to a
+    different account) — since for that account, "paycheck" and "this
+    account" are the same real money, and showing only the deposit side
+    would overstate what's actually left to allocate. */
 function accountCommittedNet(accId){
   ensurePlanner();
   let net = 0;
+  const isDefaultPayAcct = data.planner.defaultPayAccountId && data.planner.defaultPayAccountId === accId;
   data.planner.periods.forEach(p=>{
     const ids = new Set(p.dueIds || []);
     const due = recurringItems('expenses').filter(x=>ids.has(x.id));
     const paidFrom = p.billPaidFrom || {};
     due.forEach(x=>{
       if(x.creditAccountId === accId) net += Number(x.amount)||0;
+      const amt = Number(x.amount)||0;
       const pf = paidFrom[x.id];
-      if(pf && pf.accountId === accId){
-        const res = Math.min(Number(pf.amount)||0, Number(x.amount)||0);
-        net -= res;
-      }
+      const explicitRes = (pf && pf.accountId) ? Math.min(Number(pf.amount)||0, amt) : 0;
+      if(pf && pf.accountId === accId) net -= explicitRes;
+      if(isDefaultPayAcct) net -= Math.max(0, amt - explicitRes);
     });
     (p.expenses||[]).forEach(e=>{
-      if(e.reserveAccountId === accId){
-        net -= Math.min(Number(e.reserveAmount)||0, Number(e.amount)||0);
-      }
+      const amt = Number(e.amount)||0;
+      const explicitRes = e.reserveAccountId ? Math.min(Number(e.reserveAmount)||0, amt) : 0;
+      if(e.reserveAccountId === accId) net -= explicitRes;
+      if(isDefaultPayAcct) net -= Math.max(0, amt - explicitRes);
     });
     const incIds = new Set(p.dueIncomeIds || []);
     const dueIncomes = recurringItems('incomes').filter(x=>incIds.has(x.id));
@@ -3142,6 +3170,12 @@ function renderPlanner(){
 
 function renderAllocList(){
   ensurePlanner();
+  const defSel = document.getElementById('planDefaultPayAcct');
+  if(defSel){
+    const cashAccounts = cashCheckingAccounts();
+    defSel.innerHTML = '<option value="">None — keep bills abstract from any account</option>' +
+      cashAccounts.map(a=>`<option value="${a.id}" ${a.id===data.planner.defaultPayAccountId?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
+  }
   const allocList = document.getElementById('planAllocList');
   if(!allocList) return;
   const assets = data.accounts.filter(a=>a.type==='asset');
@@ -3201,6 +3235,16 @@ function renderPlannerSummaryOnly(){
 }
 
 function bindPlannerInputs(){
+  const defSel = document.getElementById('planDefaultPayAcct');
+  if(defSel && !defSel._bound){
+    defSel._bound = true;
+    defSel.addEventListener('change', ()=>{
+      ensurePlanner();
+      data.planner.defaultPayAccountId = defSel.value || '';
+      saveData();
+      renderPlanner();
+    });
+  }
   const clear = document.getElementById('planClearAlloc');
   if(clear && !clear._bound){
     clear._bound = true;
