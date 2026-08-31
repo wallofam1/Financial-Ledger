@@ -468,14 +468,14 @@
       border: 1px solid var(--border) !important;
       border-radius: var(--radius-sm) !important;
       padding: 8px 10px !important;
-      font-size: 16px !important;
-      min-height: 36px !important;
+      font-size: 12px !important;
+      min-height: 30px !important;
     }
     .entry-row input.exp-date {
       grid-area: date !important;
       width: 100% !important;
-      font-size: 16px !important;
-      min-height: 36px !important;
+      font-size: 12px !important;
+      min-height: 30px !important;
       padding: 6px 8px !important;
       -webkit-appearance: none;
       appearance: none;
@@ -483,36 +483,36 @@
     .entry-row select.exp-cat {
       grid-area: cat !important;
       width: 100% !important;
-      font-size: 16px !important;
-      min-height: 36px !important;
+      font-size: 12px !important;
+      min-height: 30px !important;
       padding: 6px 8px !important;
     }
     .entry-row input.exp-amount {
       grid-area: amount !important;
       width: 100% !important;
-      font-size: 16px !important;
-      min-height: 36px !important;
+      font-size: 12px !important;
+      min-height: 30px !important;
       padding: 6px 8px !important;
     }
     .entry-row select.exp-freq {
       grid-area: freq !important;
       width: 100% !important;
-      font-size: 16px !important;
-      min-height: 36px !important;
+      font-size: 12px !important;
+      min-height: 30px !important;
       padding: 6px 8px !important;
     }
     .entry-row select.exp-credit {
       grid-area: credit !important;
       width: 100% !important;
-      font-size: 16px !important;
-      min-height: 36px !important;
+      font-size: 12px !important;
+      min-height: 30px !important;
       padding: 6px 8px !important;
     }
     .entry-row select.exp-debit {
       grid-area: debit !important;
       width: 100% !important;
-      font-size: 16px !important;
-      min-height: 36px !important;
+      font-size: 12px !important;
+      min-height: 30px !important;
       padding: 6px 8px !important;
     }
     .entry-row .del {
@@ -553,8 +553,8 @@
       width: 100% !important;
       min-width: 0 !important;
       flex: none !important;
-      font-size: 16px !important;
-      min-height: 36px;
+      font-size: 12px !important;
+      min-height: 30px;
       padding: 6px 4px !important;
     }
     .account-block .row select.cat {
@@ -562,8 +562,8 @@
       width: 100% !important;
       max-width: none !important;
       min-width: 0 !important;
-      font-size: 16px !important;
-      min-height: 36px;
+      font-size: 12px !important;
+      min-height: 30px;
       padding: 6px 8px !important;
     }
     .account-block .row input.balance {
@@ -571,8 +571,8 @@
       width: 100% !important;
       max-width: none !important;
       min-width: 0 !important;
-      font-size: 16px !important;
-      min-height: 36px;
+      font-size: 12px !important;
+      min-height: 30px;
       padding: 6px 8px !important;
     }
     .account-block .row .del {
@@ -594,12 +594,12 @@
       flex: 1;
       min-width: 0;
       width: auto !important;
-      font-size: 16px !important;
-      min-height: 36px;
+      font-size: 12px !important;
+      min-height: 30px;
     }
 
     .holding-row { flex-wrap: wrap; gap: 6px; }
-    .holding-row input { font-size: 16px !important; min-height: 34px; min-width: 0; }
+    .holding-row input { font-size: 12px !important; min-height: 34px; min-width: 0; }
     .holding-row input.h-name { flex: 1 1 100%; }
     .holding-row input.h-ticker,
     .holding-row input.h-units { width: calc(33% - 6px); flex: 1 1 30%; }
@@ -6098,6 +6098,31 @@ document.getElementById('settingsSave').addEventListener('click', async ()=>{
   }
 });
 
+
+/* iOS Safari zooms the whole page when a focused input's rendered font-size
+   is under 16px — the usual fix is forcing every input to be 16px+ all the
+   time, which is exactly the "too big" look we just spent effort shrinking.
+   Instead, bump font-size to 16px only for the instant a field is actually
+   focused (which is the moment iOS checks), and hand control back to CSS
+   the moment focus leaves — so the resting size everywhere stays compact,
+   and typing never triggers a zoom. Scoped to mobile widths only, since
+   there's no zoom behavior to work around on desktop. */
+function isMobileViewport(){
+  return window.matchMedia('(max-width: 640px)').matches;
+}
+document.addEventListener('focusin', (e)=>{
+  const el = e.target;
+  if(!isMobileViewport()) return;
+  if(el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')){
+    el.style.setProperty('font-size', '16px', 'important');
+  }
+});
+document.addEventListener('focusout', (e)=>{
+  const el = e.target;
+  if(el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')){
+    el.style.removeProperty('font-size');
+  }
+});
 
 /* Initial render */
 renderAll();
