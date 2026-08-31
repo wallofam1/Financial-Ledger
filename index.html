@@ -1496,6 +1496,11 @@
     color: var(--amber); background: var(--amber-soft); padding: 3px 7px; border-radius: 10px;
     flex-shrink: 0; white-space: nowrap;
   }
+  .one-time-tag {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--accent); background: var(--accent-soft); padding: 2px 6px; border-radius: 10px;
+    margin-left: 6px; white-space: nowrap;
+  }
 
   @media (max-width: 640px) {
     .entry-row {
@@ -2919,7 +2924,7 @@ function paidFromBoxHtml(kind, pi, itemId, accountId, amount, fullAmount){
 
 function periodIncomeTotal(p){
   const incIds = new Set(p.dueIncomeIds || []);
-  return recurringItems('incomes').filter(x=>incIds.has(x.id)).reduce((s,x)=>s+(Number(x.amount)||0),0);
+  return plannerEligibleIncomes().filter(x=>incIds.has(x.id)).reduce((s,x)=>s+(Number(x.amount)||0),0);
 }
 /** The single source of truth for "how much take-home this period" —
     computed live from whatever's actually checked in "Income this
@@ -2945,7 +2950,7 @@ function periodDueTotal(p){
 function periodPaycheckAccounts(p){
   const incIds = new Set(p.dueIncomeIds || []);
   const accounts = new Set();
-  recurringItems('incomes').filter(x=>incIds.has(x.id)).forEach(inc=>{
+  plannerEligibleIncomes().filter(x=>incIds.has(x.id)).forEach(inc=>{
     effectiveDeposits(inc).forEach(d=>{ if(d.accountId) accounts.add(d.accountId); });
   });
   return accounts;
@@ -3017,7 +3022,7 @@ function pendingIncomeInto(accId){
   let total = 0;
   data.planner.periods.forEach(p=>{
     const incIds = new Set(p.dueIncomeIds || []);
-    const dueIncomes = recurringItems('incomes').filter(x=>incIds.has(x.id));
+    const dueIncomes = plannerEligibleIncomes().filter(x=>incIds.has(x.id));
     dueIncomes.forEach(inc=>{
       effectiveDeposits(inc).forEach(d=>{
         if(d.accountId === accId) total += Number(d.amount)||0;
@@ -3182,7 +3187,9 @@ function renderPlanner(){
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
     const dueIncomeSet = new Set(p.dueIncomeIds || []);
     const recInc = recurringItems('incomes');
-    const incomeRows = recInc.length ? recInc.map(x=>{
+    const oneTimeInc = plannerVisibleOneTimeIncomes(p);
+    const allInc = [...recInc, ...oneTimeInc];
+    const incomeRows = allInc.length ? allInc.map(x=>{
       const deposits = effectiveDeposits(x);
       const splitNote = deposits.length > 1
         ? deposits.map(d=>{ const acc = data.accounts.find(a=>a.id===d.accountId); return (acc?acc.name:'—') + ' ' + fmt(d.amount); }).join(', ')
@@ -3192,12 +3199,13 @@ function renderPlanner(){
         <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
           <input type="checkbox" data-pi="${i}" data-due-income="${x.id}" ${dueIncomeSet.has(x.id)?'checked':''}>
           <span class="ename">${escapeHtml(x.desc || x.category || 'Income')}
+            ${!isRecurring(x) ? '<span class="one-time-tag">One-time</span>' : ''}
             <span style="color:var(--text-tertiary);font-size:12px;"> ${splitNote ? '→ '+escapeHtml(splitNote) : ''}</span>
           </span>
         </label>
         <span class="eamt">${fmt(x.amount)}</span>
       </div>
-    `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring income yet. Mark it as recurring in Cash Flow.</div>';
+    `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring or one-time income yet. Add income in Cash Flow.</div>';
     const rows = (p.expenses||[]).map(e=>{
       const pfr = paidFromBoxHtml('extra', i, e.id, e.reserveAccountId, e.reserveAmount, Number(e.amount)||0);
       return `
@@ -3476,7 +3484,7 @@ function accountCommittedBreakdown(accId){
   data.planner.periods.forEach((p, i)=>{
     const periodLabel = (p.title && p.title.trim()) ? p.title.trim() : 'Period ' + (i+1);
     const incIds = new Set(p.dueIncomeIds || []);
-    recurringItems('incomes').filter(x=>incIds.has(x.id)).forEach(inc=>{
+    plannerEligibleIncomes().filter(x=>incIds.has(x.id)).forEach(inc=>{
       effectiveDeposits(inc).forEach(d=>{
         if(d.accountId === accId && Number(d.amount)){
           lines.push({ period: periodLabel, label: (inc.desc||inc.category||'Income') + ' — deposit', amount: Number(d.amount), positive: true });
@@ -4842,6 +4850,25 @@ function recurringItems(collection){
     }
   });
   return Object.values(map).sort((a,b)=> monthlyEquivalent(b) - monthlyEquivalent(a));
+}
+
+/** Every income the Planner's "Income this paycheck" checklist can offer —
+    recurring paychecks (as before, deduplicated to one entry per
+    category+desc) plus one-time income (a bonus, a tax return, a gift):
+    each one-time entry stands alone since, unlike a recurring paycheck,
+    there's no "latest instance" to collapse duplicates down to. Sorted
+    recurring-first since those are the common case. */
+function plannerEligibleIncomes(){
+  const oneTime = data.incomes.filter(x=>!isRecurring(x));
+  return [...recurringItems('incomes'), ...oneTime];
+}
+/** Which one-time incomes the checklist should actually show: unposted
+    (still pending, so still relevant to plan around) or already checked
+    due in this specific period (so checking one doesn't make it silently
+    disappear from view the moment its date passes and it posts for real). */
+function plannerVisibleOneTimeIncomes(p){
+  const dueSet = new Set(p.dueIncomeIds || []);
+  return data.incomes.filter(x=>!isRecurring(x) && (!x.posted || dueSet.has(x.id)));
 }
 
 function recurringMonthlyTotal(collection){
