@@ -283,6 +283,12 @@
   .goal-card.clickable:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); transform: translateY(-1px); }
   .goal-card.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .goals-toggle-row { text-align: center; margin-bottom: 20px; }
+  .dash-networth-compact {
+    display: flex; align-items: baseline; justify-content: center; gap: 8px;
+    margin: -8px 0 16px;
+  }
+  .dash-networth-label { font-size: 12.5px; color: var(--text-tertiary); }
+  .dash-networth-value { font-size: 17px; font-weight: 600; color: var(--text); }
   #dashDetails { animation: detailsFadeIn 180ms ease; }
   @keyframes detailsFadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
   @media (max-width: 640px) {
@@ -315,6 +321,7 @@
     font-weight: 400; font-size: 13px; color: var(--text-tertiary); margin-left: 6px;
   }
   .chart-wrap { height: 220px; width: 100%; max-width: 100%; overflow: hidden; }
+  .chart-wrap.empty { height: 0; }
   .empty-note {
     color: var(--text-secondary); font-size: 13.5px; font-weight: 450; text-align: center; padding: 40px 0;
     line-height: 1.5; letter-spacing: -0.005em;
@@ -1592,6 +1599,10 @@
     </div>
 
     <div class="goals-row" id="goalsRow"></div>
+    <div class="dash-networth-compact" id="dashNetWorthCompact">
+      <span class="dash-networth-label">Net Worth</span>
+      <span class="dash-networth-value" id="dashNetWorthCompactVal">$0</span>
+    </div>
     <div class="goals-toggle-row">
       <button type="button" id="dashDetailsToggle" class="insight-more-toggle">Show the numbers</button>
     </div>
@@ -4684,6 +4695,8 @@ function renderSummary(){
   setFigureText(document.getElementById('accAssetsFig'), fmt(t.assets));
   setFigureText(document.getElementById('accLiabFig'), fmt(t.liabilities));
   setFigureText(document.getElementById('accNetWorthFig'), fmt(t.net));
+  const nwCompact = document.getElementById('dashNetWorthCompactVal');
+  if(nwCompact) nwCompact.textContent = fmt(t.net);
 
   const deltaText = (()=>{
     if(!data.history.length) return {text:'', cls:'delta'};
@@ -4729,11 +4742,14 @@ function getChartColors(){
 
 function makeHistoryChart(canvas, emptyNoteId){
   const emptyNote = document.getElementById(emptyNoteId);
+  const wrap = canvas.closest('.chart-wrap');
   if(!data.history.length){
     canvas.style.display='none'; emptyNote.style.display='block';
+    if(wrap) wrap.classList.add('empty');
     return null;
   }
   canvas.style.display='block'; emptyNote.style.display='none';
+  if(wrap) wrap.classList.remove('empty');
   const colors = getChartColors();
   const labels = data.history.map(h=>new Date(h.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
   const netData = data.history.map(h=>h.netWorth);
@@ -5277,6 +5293,30 @@ function renderIncomeChart(){
   incomeChart = makeTrendChart(canvas, 'incTrendEmpty', 'incomes', colors.barInc);
 }
 
+/** For the Recurring list's "pays into ___" note — names the actual
+    destination account (and sub-account, if any) instead of a generic
+    "pays into account", since knowing category+frequency alone rarely
+    tells you where the money is actually headed. */
+function recurringDestinationNote(x, collection){
+  if(collection === 'incomes'){
+    const deposits = effectiveDeposits(x);
+    const names = deposits.map(d=>{
+      const acc = data.accounts.find(a=>a.id===d.accountId);
+      if(!acc) return null;
+      const sub = d.subAccount && d.subAccount.trim();
+      return acc.name + (sub ? ' · ' + sub : '');
+    }).filter(Boolean);
+    return names.length ? 'pays into ' + names.join(', ') : '';
+  }
+  if(x.creditAccountId){
+    const acc = data.accounts.find(a=>a.id===x.creditAccountId);
+    if(!acc) return '';
+    const sub = x.creditSubAccount && x.creditSubAccount.trim();
+    return 'pays into ' + acc.name + (sub ? ' · ' + sub : '');
+  }
+  return '';
+}
+
 function renderRecurringList(collection){
   const isExp = collection === 'expenses';
   const prefix = isExp ? 'exp' : 'inc';
@@ -5294,12 +5334,14 @@ function renderRecurringList(collection){
     const logged = hasLoggedThisMonth(collection, x);
     const freqLabel = (FREQ_OPTIONS.find(f=>f.value===(x.frequency||'monthly'))||{}).label || 'Monthly';
     const moEq = monthlyEquivalent(x);
+    const destNote = recurringDestinationNote(x, collection);
     return `
       <div class="row">
-        <span style="flex:1;font-size:14px;">${escapeHtml(x.desc || x.category || 'Untitled')}
-          <span style="color:var(--text-tertiary);font-size:12px;margin-left:6px;">${escapeHtml(x.category)} · ${freqLabel}${x.creditAccountId?' · pays into account':''}</span>
-        </span>
-        <span style="font-size:14px;font-weight:500;color:${isExp?'var(--red)':'var(--green)'};margin-right:8px;" title="${fmt(x.amount)} ${freqLabel.toLowerCase()}">${fmt(moEq)}/mo</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;">${escapeHtml(x.desc || x.category || 'Untitled')}</div>
+          <div style="color:var(--text-tertiary);font-size:12px;margin-top:2px;">${escapeHtml(x.category)} · ${freqLabel}${destNote ? ' · ' + escapeHtml(destNote) : ''}</div>
+        </div>
+        <span style="font-size:14px;font-weight:500;color:${isExp?'var(--red)':'var(--green)'};margin-right:8px;flex-shrink:0;" title="${fmt(x.amount)} ${freqLabel.toLowerCase()}">${fmt(moEq)}/mo</span>
         <button class="log-btn ${logged?'done':''}" data-collection="${collection}" data-id="${x.id}">
           ${logged ? 'Logged' : 'Log this month'}
         </button>
