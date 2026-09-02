@@ -1288,6 +1288,9 @@
   }
   .exp-check-row .ename { flex: 1; min-width: 0; }
   .exp-check-row .eamt { color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
+  .exp-check-row .row-action-slot {
+    min-width: 28px; flex-shrink: 0; display: flex; justify-content: center; align-items: center;
+  }
   .reserve-covered-row {
     display: flex; align-items: center; gap: 8px; cursor: pointer;
     padding: 2px 0 10px 28px; margin-top: -4px;
@@ -3265,7 +3268,7 @@ function renderPlanner(){
           </span>
         </label>
         <span class="eamt">${fmt(x.amount)}</span>
-        ${pfr.toggle}
+        <span class="row-action-slot">${pfr.toggle}</span>
       </div>
       ${pfr.body ? `<div class="paidfrom-row">${pfr.body}</div>` : ''}
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring bills yet. Mark items as recurring in Cash Flow.</div>';
@@ -3288,6 +3291,7 @@ function renderPlanner(){
           </span>
         </label>
         <span class="eamt">${fmt(x.amount)}</span>
+        <span class="row-action-slot"></span>
       </div>
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring or one-time income yet. Add income in Cash Flow.</div>';
     const rows = (p.expenses||[]).map(e=>{
