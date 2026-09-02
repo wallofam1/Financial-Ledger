@@ -3281,18 +3281,21 @@ function renderPlanner(){
       const splitNote = deposits.length > 1
         ? deposits.map(d=>{ const acc = data.accounts.find(a=>a.id===d.accountId); return (acc?acc.name:'—') + ' ' + fmt(d.amount); }).join(', ')
         : (deposits.length === 1 ? (data.accounts.find(a=>a.id===deposits[0].accountId)||{}).name : null);
+      const detailKey = 'income-detail:' + x.id;
+      const detailOpen = expandedPaidFrom.has(detailKey);
+      const hasToggle = !!splitNote;
       return `
       <div class="exp-check-row">
         <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
           <input type="checkbox" data-pi="${i}" data-due-income="${x.id}" ${dueIncomeSet.has(x.id)?'checked':''}>
           <span class="ename">${escapeHtml(x.desc || x.category || 'Income')}
             ${!isRecurring(x) ? '<span class="one-time-tag">One-time</span>' : ''}
-            <span style="color:var(--text-tertiary);font-size:12px;"> ${splitNote ? '→ '+escapeHtml(splitNote) : ''}</span>
           </span>
         </label>
         <span class="eamt">${fmt(x.amount)}</span>
-        <span class="row-action-slot"></span>
+        <span class="row-action-slot">${hasToggle ? `<button type="button" class="paidfrom-toggle ${detailOpen?'active':''}" data-kind="income-detail" data-id="${x.id}" title="Where this deposits">${ICON_MORE}</button>` : ''}</span>
       </div>
+      ${hasToggle && detailOpen ? `<div class="paidfrom-row"><div class="paidfrom-box"><span class="pexp-reserve-note" style="margin-left:0;">→ ${escapeHtml(splitNote)}</span></div></div>` : ''}
     `;}).join('') : '<div class="empty-note" style="padding:8px 0;text-align:left;">No recurring or one-time income yet. Add income in Cash Flow.</div>';
     const rows = (p.expenses||[]).map(e=>{
       const pfr = paidFromBoxHtml('extra', i, e.id, e.reserveAccountId, e.reserveAmount, Number(e.amount)||0);
