@@ -3273,8 +3273,9 @@ function renderPlanner(){
       <div class="exp-check-row">
         <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
           <input type="checkbox" data-pi="${i}" data-due="${x.id}" ${dueSet.has(x.id)?'checked':''}>
-          <span class="ename">${escapeHtml(x.desc || x.category || 'Bill')}
-            <span style="color:var(--text-tertiary);font-size:12px;"> ${escapeHtml(x.category||'')}</span>
+          <span class="ename" style="display:flex;flex-direction:column;">
+            <span>${escapeHtml(x.desc || x.category || 'Bill')}</span>
+            <span style="color:var(--text-tertiary);font-size:12px;">${escapeHtml(x.category||'')}</span>
           </span>
         </label>
         <span class="eamt">${fmt(x.amount)}</span>
