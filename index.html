@@ -2202,7 +2202,7 @@ const ALCHEMY_KEY = 'ledger-alchemy-key';
 const BASE_CHAIN_ID = 8453;
 const ASSET_CATS = ['Cash','Investments','Stocks','Blockchain','Retirement','Real Estate','Vehicles','Other'];
 const LIAB_CATS = ['Credit Card','Loan','Mortgage','Other'];
-const EXPENSE_CATS = ['Housing','Utilities','Groceries','Dining','Transportation','Insurance','Healthcare','Entertainment','Shopping','Subscriptions','Travel','Education','Personal Care','Debt Payment','Savings & Investments','Gifts & Donations','Other'];
+const EXPENSE_CATS = ['Housing','Utilities','Groceries','Dining','Transportation','Insurance','Healthcare','Entertainment','Shopping','Subscriptions','Travel','Education','Personal Care','Debt Payment','Save & Invest','Gifts & Donations','Other'];
 const FREQ_OPTIONS = [
   {value:'one-time', label:'One-time'},
   {value:'weekly', label:'Weekly'},
@@ -2248,6 +2248,16 @@ if(!data.history) data.history = [];
 if(!data.budgets || typeof data.budgets !== 'object') data.budgets = {};
 if(!data._updatedAt) data._updatedAt = new Date().toISOString();
 if(!data.planner) data.planner = { periods: null, allocations:{} };
+
+// Migration: "Savings & Investments" category was renamed to "Save & Invest"
+// — carry existing expenses and any budget set against the old name forward
+// under the new one, so nothing silently drops out of its category grouping
+// or budget tracking.
+data.expenses.forEach(x=>{ if(x.category === 'Savings & Investments') x.category = 'Save & Invest'; });
+if(data.budgets && Object.prototype.hasOwnProperty.call(data.budgets, 'Savings & Investments')){
+  data.budgets['Save & Invest'] = data.budgets['Savings & Investments'];
+  delete data.budgets['Savings & Investments'];
+}
 
 // Migration: entries saved before the posted/pending system existed were
 // always applied to real balances immediately regardless of date — mark
@@ -5065,7 +5075,7 @@ function renderExpenseRows(){
         <option value="">Pays into: none</option>
         ${assetAccountOptions(exp.creditAccountId||'')}
       </select>
-      ${exp.category === 'Savings & Investments' && exp.creditAccountId ? subAccountSelectHtml(exp.id, exp.creditAccountId, exp.creditSubAccount, 'expense-subacct entry-more') : ''}
+      ${exp.category === 'Save & Invest' && exp.creditAccountId ? subAccountSelectHtml(exp.id, exp.creditAccountId, exp.creditSubAccount, 'expense-subacct entry-more') : ''}
       <select class="exp-debit entry-more" data-id="${exp.id}" data-field="debitAccountId" title="Paid from account">
         <option value="">Paid from: none</option>
         ${assetAccountOptions(exp.debitAccountId||'')}
@@ -5249,7 +5259,7 @@ function onEntryFieldChange(e, collection){
     item.recurring = e.target.value !== 'one-time';
   } else if(field==='category' && collection==='expenses'){
     item.category = e.target.value;
-    renderExpenseRows(); // discrete change — shows/hides the sub-account picker when toggling to/from Savings & Investments
+    renderExpenseRows(); // discrete change — shows/hides the sub-account picker when toggling to/from Save & Invest
   } else if(field==='amount' && collection==='expenses'){
     reconcileExpenseCredits(item, ()=>{ item.amount = Number(e.target.value)||0; });
   } else if(field==='amount' && collection==='incomes'){
@@ -5823,7 +5833,7 @@ function goalSavingExtra(){
   const expTotal = monthExp.reduce((s,x)=>s+(Number(x.amount)||0),0);
   const incTotal = monthCollectionTotal('incomes', mk);
   const net = incTotal - expTotal;
-  const savings = monthExp.filter(x=>(x.category||'').trim()==='Savings & Investments').reduce((s,x)=>s+(Number(x.amount)||0),0);
+  const savings = monthExp.filter(x=>(x.category||'').trim()==='Save & Invest').reduce((s,x)=>s+(Number(x.amount)||0),0);
   const goto = {tab:'cashflow', sub:'expenses'};
   const target = Number(data.goalSettings.savingsTarget) || 0;
 
